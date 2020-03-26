@@ -9,6 +9,6 @@ $(function() {
 		terminal.echo(dump);
 	},{
 		prompt: '>',
-		greetings: 'Stupid Genius Software\nThis site under construction.  Please visit: https://apps.stupid-genius.com'
+		greetings: 'Stupid Genius Software\nThis site under construction.  Please visit: https://stupid-genius.com'
 	});
 });
