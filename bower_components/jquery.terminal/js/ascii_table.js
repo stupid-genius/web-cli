@@ -17,7 +17,7 @@
  *        // or
  *        term.echo(ascii_table(arr, true)); // this will render first row as header
  *
- * Copyright (c) 2018 Jakub Jankiewicz <http://jcubic.pl/me>
+ * Copyright (c) 2018-2020 Jakub Jankiewicz <https://jcubic.pl/me>
  * Released under the MIT license
  *
  */
@@ -53,7 +53,7 @@
             var row = array[i];
             var stacks = [];
             for (var j = 0; j < row.length; j++) {
-                var new_lines = row[j].toString().split("\n");
+                var new_lines = row[j].toString().replace(/\r/g).split("\n");
                 row[j] = new_lines.shift();
                 stacks.push(new_lines);
             }
@@ -97,7 +97,7 @@
             }).join(' | ') + ' |';
         });
         array = array.map(function(line) {
-            return line.replace(/&/g, '&amp;');
+            return line.replace(/&(?![^;]+;)/g, '&amp;');
         });
         var sep = '+' + lengths.map(function(length) {
             return new Array(length + 3).join('-');

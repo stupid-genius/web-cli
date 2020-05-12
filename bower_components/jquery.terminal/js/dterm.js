@@ -6,11 +6,11 @@
  * \___//____ \\___//____//_/ _\_  / /_//____//_/ /_/ /_//_//_/ /_/ \__\_\___/
  *           \/              /____/
  * Example plugin using JQuery Terminal Emulator
- * Copyright (c) 2014-2018 Jakub Jankiewicz <http://jcubic.pl/me>
+ * Copyright (c) 2014-2020 Jakub Jankiewicz <https://jcubic.pl/me>
  * Released under the MIT license
  *
  */
-/* global jQuery, setTimeout, IntersectionObserver, define, global, require, module */
+/* global define */
 (function(factory, undefined) {
     var root = typeof window !== 'undefined' ? window : global;
     if (typeof define === 'function' && define.amd) {
@@ -86,7 +86,7 @@
                     terminal.disable();
                 }
             }, {
-                root: document.body
+                root: null
             });
             visibility_observer.observe(terminal[0]);
         }

@@ -6,9 +6,9 @@
  * \___//____ \\___//____//_/ _\_  / /_//____//_/ /_/ /_//_//_/ /_/ \__\_\___/
  *           \/              /____/                              version {{VER}}
  *
- * This file is part of jQuery Terminal. http://terminal.jcubic.pl
+ * This file is part of jQuery Terminal. https://terminal.jcubic.pl
  *
- * Copyright (c) 2010-2018 Jakub Jankiewicz <http://jcubic.pl/me>
+ * Copyright (c) 2010-2020 Jakub T. Jankiewicz <https://jcubic.pl/m>e
  * Released under the MIT license
  *
  * Contains:
@@ -32,25 +32,18 @@
  * Copyright (c) 2007-2013 Alexandru Marasteanu <hello at alexei dot ro>
  * licensed under 3 clause BSD license
  *
+ * debounce function from Lodash
+ * Copyright JS Foundation and other contributors <https://js.foundation/>
+ * The MIT License
+ *
  * emoji regex v7.0.1 by Mathias Bynens
  * MIT license
  *
+ * broken image by Sophia Bai from the Noun Project (CC-BY)
+ *
  * Date: {{DATE}}
  */
-
-/* TODO:
- *
- * Debug interpreters names in LocalStorage
- *
- * TEST: login + promises/exec
- *       json-rpc/object + promises
- *
- * NOTE: json-rpc don't need promises and delegate resume/pause because only
- *       exec can call it and exec call interpreter that work with resume/pause
- */
-/* global location, jQuery, setTimeout, window, global, localStorage, sprintf,
-         setImmediate, IntersectionObserver, MutationObserver, ResizeObserver,
-         module, require, define, setInterval, clearInterval */
+/* global define, Map */
 /* eslint-disable */
 /* istanbul ignore next */
 (function(ctx) {
@@ -95,7 +88,7 @@
                     case 'e': arg = match[7] ? arg.toExponential(match[7]) : arg.toExponential(); break;
                     case 'f': arg = match[7] ? parseFloat(arg).toFixed(match[7]) : parseFloat(arg); break;
                     case 'o': arg = arg.toString(8); break;
-                    case 's': arg = ((arg = String(arg)) && match[7] ? arg.substring(0, match[7]) : arg); break;
+                    case 's': arg = ((arg = String(arg)) && match[7] ? arg.slice(0, match[7]) : arg); break;
                     case 'u': arg = arg >>> 0; break;
                     case 'x': arg = arg.toString(16); break;
                     case 'X': arg = arg.toString(16).toUpperCase(); break;
@@ -127,7 +120,7 @@
                     var field_list = [], replacement_field = match[2], field_match = [];
                     if ((field_match = /^([a-z_][a-z_\d]*)/i.exec(replacement_field)) !== null) {
                         field_list.push(field_match[1]);
-                        while ((replacement_field = replacement_field.substring(field_match[0].length)) !== '') {
+                        while ((replacement_field = replacement_field.slice(field_match[0].length)) !== '') {
                             if ((field_match = /^\.([a-z_][a-z_\d]*)/i.exec(replacement_field)) !== null) {
                                 field_list.push(field_match[1]);
                             }
@@ -155,7 +148,7 @@
             else {
                 throw('[sprintf] huh?');
             }
-            _fmt = _fmt.substring(match[0].length);
+            _fmt = _fmt.slice(match[0].length);
         }
         return parse_tree;
     };
@@ -184,6 +177,7 @@
     ctx.sprintf = sprintf;
     ctx.vsprintf = vsprintf;
 })(typeof global !== "undefined" ? global : window);
+// -----------------------------------------------------------------------
 /* eslint-enable */
 // UMD taken from https://github.com/umdjs/umd
 (function(factory, undefined) {
@@ -191,7 +185,10 @@
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as an anonymous module.
         // istanbul ignore next
-        define(['jquery', 'wcwidth'], factory);
+        define(['jquery', 'wcwidth'], function(jquery, wcwidth) {
+            factory(jquery, wcwidth, root);
+            return jquery;
+        });
     } else if (typeof module === 'object' && module.exports) {
         // Node/CommonJS
         module.exports = function(root, jQuery, wcwidth) {
@@ -209,20 +206,21 @@
             if (wcwidth === undefined) {
                 wcwidth = require('wcwidth');
             }
-            factory(jQuery, wcwidth);
+            factory(jQuery, wcwidth, root);
             return jQuery;
         };
     } else {
         // Browser
         // istanbul ignore next
-        factory(root.jQuery, root.wcwidth);
+        factory(root.jQuery, root.wcwidth, root);
     }
-})(function($, wcwidth, undefined) {
+})(function($, wcwidth, root, undefined) {
     'use strict';
     // -----------------------------------------------------------------------
     // :: debug functions
     // -----------------------------------------------------------------------
     /* eslint-disable */
+    /* istanbul ignore next */
     function debug(str) {
         if (false) {
             console.log(str);
@@ -307,8 +305,17 @@
     var clone = function(object) {
         return Clone.clone_object(object);
     };
-
+    // -----------------------------------------------------------------------
+    // IE11 polyfill
+    // -----------------------------------------------------------------------
     /* eslint-disable */
+    if (!('clear' in Map.prototype)) {
+        Map.prototype.clear = function() {
+            this.forEach(function(value, key, map) {
+                map.delete(key);
+            });
+        };
+    }
     // -----------------------------------------------------------------------
     // :: Storage plugin
     // -----------------------------------------------------------------------
@@ -379,10 +386,10 @@
             for (i = 0; i < ca.length; i++) {
                 c = ca[i];
                 while (c.charAt(0) === ' ') {
-                    c = c.substring(1, c.length);
+                    c = c.slice(1, c.length);
                 }
                 if (c.indexOf(nn) === 0) {
-                    return c.substring(nn.length, c.length);
+                    return c.slice(nn.length, c.length);
                 }
             }
             return null;
@@ -421,6 +428,146 @@
                 }
             });
         }
+    })();
+    // -----------------------------------------------------------------------
+    // :: Debounce from Lodash
+    // -----------------------------------------------------------------------
+    /* istanbul ignore next */
+    var debounce = (function() {
+        var FUNC_ERROR_TEXT = 'Expected a function';
+        function isObject(value) {
+            var type = typeof value;
+            return value != null && (type == 'object' || type == 'function');
+        }
+        function now() {
+            return Date.now();
+        }
+        return function debounce(func, wait, options) {
+            var nativeMax = Math.max,
+                nativeMin = Math.min;
+
+            var lastArgs,
+                lastThis,
+                maxWait,
+                result,
+                timerId,
+                lastCallTime,
+                lastInvokeTime = 0,
+                leading = false,
+                maxing = false,
+                trailing = true;
+
+            if (typeof func != 'function') {
+                throw new TypeError(FUNC_ERROR_TEXT);
+            }
+            wait = wait || 0;
+            if (isObject(options)) {
+                leading = !!options.leading;
+                maxing = 'maxWait' in options;
+                maxWait = maxing ? nativeMax(options.maxWait || 0, wait) : maxWait;
+                trailing = 'trailing' in options ? !!options.trailing : trailing;
+            }
+
+            function invokeFunc(time) {
+                var args = lastArgs,
+                    thisArg = lastThis;
+
+                lastArgs = lastThis = undefined;
+                lastInvokeTime = time;
+                result = func.apply(thisArg, args);
+                return result;
+            }
+
+            function leadingEdge(time) {
+                // Reset any `maxWait` timer.
+                lastInvokeTime = time;
+                // Start the timer for the trailing edge.
+                timerId = setTimeout(timerExpired, wait);
+                // Invoke the leading edge.
+                return leading ? invokeFunc(time) : result;
+            }
+
+            function remainingWait(time) {
+                var timeSinceLastCall = time - lastCallTime,
+                    timeSinceLastInvoke = time - lastInvokeTime,
+                    timeWaiting = wait - timeSinceLastCall;
+
+                return maxing
+                    ? nativeMin(timeWaiting, maxWait - timeSinceLastInvoke)
+                    : timeWaiting;
+            }
+
+            function shouldInvoke(time) {
+                var timeSinceLastCall = time - lastCallTime,
+                    timeSinceLastInvoke = time - lastInvokeTime;
+
+                // Either this is the first call, activity has stopped and we're at the
+                // trailing edge, the system time has gone backwards and we're treating
+                // it as the trailing edge, or we've hit the `maxWait` limit.
+                return (lastCallTime === undefined || (timeSinceLastCall >= wait) ||
+                        (timeSinceLastCall < 0) || (maxing && timeSinceLastInvoke >= maxWait));
+            }
+
+            function timerExpired() {
+                var time = now();
+                if (shouldInvoke(time)) {
+                    return trailingEdge(time);
+                }
+                // Restart the timer.
+                timerId = setTimeout(timerExpired, remainingWait(time));
+            }
+
+            function trailingEdge(time) {
+                timerId = undefined;
+
+                // Only invoke if we have `lastArgs` which means `func` has been
+                // debounced at least once.
+                if (trailing && lastArgs) {
+                    return invokeFunc(time);
+                }
+                lastArgs = lastThis = undefined;
+                return result;
+            }
+
+            function cancel() {
+                if (timerId !== undefined) {
+                    clearTimeout(timerId);
+                }
+                lastInvokeTime = 0;
+                lastArgs = lastCallTime = lastThis = timerId = undefined;
+            }
+
+            function flush() {
+                return timerId === undefined ? result : trailingEdge(now());
+            }
+
+            function debounced() {
+                var time = now(),
+                    isInvoking = shouldInvoke(time);
+
+                lastArgs = arguments;
+                lastThis = this;
+                lastCallTime = time;
+
+                if (isInvoking) {
+                    if (timerId === undefined) {
+                        return leadingEdge(lastCallTime);
+                    }
+                    if (maxing) {
+                        // Handle invocations in a tight loop.
+                        timerId = setTimeout(timerExpired, wait);
+                        return invokeFunc(lastCallTime);
+                    }
+                }
+                if (timerId === undefined) {
+                    timerId = setTimeout(timerExpired, wait);
+                }
+                return result;
+            }
+            debounced.cancel = cancel;
+            debounced.flush = flush;
+            return debounced;
+        };
     })();
     // -----------------------------------------------------------------------
     // :: jQuery Timers
@@ -600,7 +747,6 @@
     // -----------------------------------------------------------------------
     /* istanbul ignore next */
     (function(undef) {
-
         // prevent double include
 
         if (!String.prototype.split.toString().match(/\[native/)) {
@@ -699,7 +845,9 @@
             if (window.getSelection) {
                 //contenteditable
                 if (isContentEditable) {
-                    target.focus();
+                    if (!this.is(':focus')) {
+                        target.focus();
+                    }
                     var range1 = window.getSelection().getRangeAt(0),
                     range2 = range1.cloneRange();
                     range2.selectNodeContents(target);
@@ -739,8 +887,11 @@
         if (window.getSelection) {
             //contenteditable
             if (isContentEditable) {
-                target.focus();
-                window.getSelection().collapse(target.firstChild, pos);
+                if (!this.is(':focus')) {
+                    target.focus();
+                }
+                var selection = window.getSelection();
+                selection.collapse(selection.focusNode, pos);
             }
             //textarea
             else
@@ -761,82 +912,328 @@
     };
     /* eslint-enable */
     // -----------------------------------------------------------------------
+    // :: callback based event handler plugin generator
+    // -----------------------------------------------------------------------
+    function make_callback_plugin(options) {
+        var factory_settings = $.extend({
+            init: $.noop,
+            destroy: $.noop,
+            name: 'event'
+        }, options);
+        return function(callback, options) {
+            var trigger = arguments.length === 0;
+            var unbind = arguments[0] === "unbind";
+            if (!trigger && !unbind && !is_function(callback)) {
+                throw new Error('Invalid argument, it need to a function or string ' +
+                                '"unbind" or no arguments.');
+            }
+            if (unbind) {
+                callback = is_function(arguments[1]) ? arguments[1] : null;
+            }
+            var data_name = 'callbacks_' + factory_settings.name;
+            return this.each(function() {
+                var $this = $(this);
+                var callbacks;
+                function handler(arg) {
+                    callbacks.fireWith($this, [arg]);
+                }
+                if (trigger || unbind) {
+                    callbacks = $this.data(data_name);
+                    if (trigger) {
+                        callbacks && callbacks.fire();
+                    } else {
+                        if (callback && callbacks) {
+                            callbacks.remove(callback);
+                            if (!callbacks.has()) {
+                                callbacks = null;
+                            }
+                        } else {
+                            callbacks = null;
+                        }
+                        if (!callbacks) {
+                            $this.removeData(data_name);
+                            factory_settings.destroy.call(this, handler, options);
+                        }
+                    }
+                } else if ($this.data(data_name)) {
+                    $(this).data(data_name).add(callback);
+                } else {
+                    callbacks = $.Callbacks();
+                    callbacks.add(callback);
+                    $this.data(data_name, callbacks);
+                    factory_settings.init.call(this, handler, options);
+                }
+            });
+        };
+    }
+    // -----------------------------------------------------------------------
     // :: Cross-browser resize element plugin using sentinel iframe or
     // :: resizeObserver
     // -----------------------------------------------------------------------
-    $.fn.resizer = function(callback) {
-        var unbind = arguments[0] === "unbind";
-        if (!unbind && !is_function(callback)) {
-            throw new Error(
-                'Invalid argument, it need to a function or string "unbind".'
-            );
-        }
-        if (unbind) {
-            callback = is_function(arguments[1]) ? arguments[1] : null;
-        }
-        return this.each(function() {
+    $.fn.resizer = make_callback_plugin({
+        name: 'resize',
+        init: function(handler, options) {
+            var settings = $.extend({
+                prefix: ''
+            }, options);
             var $this = $(this);
-            var iframe;
-            var callbacks;
-            function resize_handler() {
-                callbacks.fire();
-            }
-            if (unbind) {
-                callbacks = $this.data('callbacks');
-                if (callback && callbacks) {
-                    callbacks.remove(callback);
-                    if (!callbacks.has()) {
-                        callbacks = null;
+            var resizer;
+            var first = true;
+            if ($this.is('body')) {
+                $(window).on('resize.resizer', handler);
+            } else if (window.ResizeObserver) {
+                resizer = new ResizeObserver(function() {
+                    if (!first) {
+                        handler();
                     }
-                } else {
-                    callbacks = null;
-                }
-                if (!callbacks) {
-                    $this.removeData('callbacks');
-                    if (window.ResizeObserver) {
-                        var observer = $this.data('observer');
-                        if (observer) {
-                            observer.unobserve(this);
-                            $this.removeData('observer');
-                        }
-                    } else {
-                        iframe = $this.find('> iframe');
-                        if (iframe.length) {
-                            // just in case of memory leaks in IE
-                            $(iframe[0].contentWindow).off('resize').remove();
-                            iframe.remove();
-                        } else if ($this.is('body')) {
-                            $(window).off('resize.resizer');
-                        }
-                    }
-                }
-            } else if ($this.data('callbacks')) {
-                $(this).data('callbacks').add(callback);
+                    first = false;
+                });
+                resizer.observe(this);
+                $this.data('observer', resizer);
             } else {
-                callbacks = $.Callbacks();
-                callbacks.add(callback);
-                $this.data('callbacks', callbacks);
-                var resizer;
-                var first = true;
-                if (window.ResizeObserver) {
-                    resizer = new ResizeObserver(function() {
-                        if (!first) {
-                            resize_handler();
-                        }
-                        first = false;
-                    });
-                    resizer.observe(this);
-                    $this.data('observer', resizer);
+                var iframe = $('<iframe/>').addClass(settings.prefix + 'resizer')
+                    .appendTo(this)[0];
+                $(iframe.contentWindow).on('resize', handler);
+            }
+        },
+        destroy: function() {
+            var $this = $(this);
+            if (window.ResizeObserver) {
+                var observer = $this.data('observer');
+                if (observer) {
+                    observer.unobserve(this);
+                    $this.removeData('observer');
+                }
+            } else {
+                var iframe = $this.find('> iframe[class$="resizer"]');
+                if (iframe.length) {
+                    // just in case of memory leaks in IE
+                    $(iframe[0].contentWindow).off('resize').remove();
+                    iframe.remove();
                 } else if ($this.is('body')) {
-                    $(window).on('resize.resizer', resize_handler);
-                } else {
-                    iframe = $('<iframe/>').addClass('resizer').appendTo(this)[0];
-
-                    $(iframe.contentWindow).on('resize', resize_handler);
+                    $(window).off('resize.resizer');
                 }
             }
-        });
-    };
+        }
+    });
+    // -----------------------------------------------------------------------
+    // :: mobile friendly scroll that work without scrollbar (for less)
+    // -----------------------------------------------------------------------
+    $.fn.touch_scroll = make_callback_plugin({
+        name: 'touch',
+        init: function(handler) {
+            var origin;
+            var previous;
+            $(this).on('touchstart.scroll', function(e) {
+                e = e.originalEvent;
+                if (e.target.tagName.toLowerCase() !== 'a' && e.touches.length === 1) {
+                    previous = origin = e.touches[0];
+                }
+            }).on('touchmove.scroll', function(e) {
+                e = e.originalEvent;
+                if (origin && e.touches.length === 1) {
+                    var current = e.touches[0];
+                    var ret = handler({
+                        origin: origin,
+                        previous: previous,
+                        current: current
+                    });
+                    if (ret === false) {
+                        e.preventDefault();
+                    }
+                    previous = current;
+                }
+            }).on('touchend.scroll', function() {
+                if (origin || previous) {
+                    origin = previous = null;
+                }
+            });
+        },
+        destroy: function() {
+            $(this).off('touchstart.scroll touchmove.scroll touchend.scroll');
+        }
+    });
+    // -----------------------------------------------------------------------
+    function jquery_resolve(value) {
+        var defer = jQuery.Deferred();
+        defer.resolve(value);
+        return defer.promise();
+    }
+    // -----------------------------------------------------------------------
+    function unpromise(value, callback, error) {
+        if (value !== undefined) {
+            if (is_function(value.catch)) {
+                value.catch(error);
+            }
+            if (is_function(value.done)) {
+                return value.done(callback);
+            } else if (is_function(value.then)) {
+                return value.then(callback);
+            } else {
+                return callback(value);
+            }
+        }
+    }
+    // -----------------------------------------------------------------------
+    // :: based on https://github.com/zeusdeux/isInViewport
+    // :: work only vertically and on dom elements
+    // -----------------------------------------------------------------------
+    $.fn.is_fully_in_viewport = (function() {
+        function is_visible(node, container) {
+            var box = node.getBoundingClientRect();
+            var viewport = container[0].getBoundingClientRect();
+            var top = box.top - viewport.top;
+            var bottom = box.bottom - viewport.top;
+            var height = container.height();
+            return bottom > 0 && top <= height;
+        }
+        if (window.IntersectionObserver) {
+            return function(container) {
+                var node = this[0];
+                var defer = jQuery.Deferred();
+                var item_observer = new window.IntersectionObserver(function(entries) {
+                    defer.resolve(entries[0].isIntersecting && entries[0].ratio === 1);
+                    item_observer.unobserve(node);
+                }, {
+                    root: container[0]
+                });
+                item_observer.observe(node);
+                return defer.promise();
+            };
+        } else {
+            return function(container) {
+                return jquery_resolve(is_visible(this[0], container));
+            };
+        }
+    })();
+    // -------------------------------------------------------------------------
+    /* eslint-disable */
+    var entity_re = /(&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)/i;
+    // regex that match single character at begining and folowing combine character
+    // https://en.wikipedia.org/wiki/Combining_character
+    var combine_chr_re = /(.(?:[\u0300-\u036F]|[\u1AB0-\u1abE]|[\u1DC0-\u1DF9]|[\u1DFB-\u1DFF]|[\u20D0-\u20F0]|[\uFE20-\uFE2F])+)/;
+    // source: https://mathiasbynens.be/notes/javascript-unicode
+    var astral_symbols_re = /([\uD800-\uDBFF][\uDC00-\uDFFF])/;
+    // source: https://github.com/mathiasbynens/emoji-regex
+    var emoji_re = /(\uD83C\uDFF4(?:\uDB40\uDC67\uDB40\uDC62(?:\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67|\uDB40\uDC77\uDB40\uDC6C\uDB40\uDC73|\uDB40\uDC73\uDB40\uDC63\uDB40\uDC74)\uDB40\uDC7F|\u200D\u2620\uFE0F)|\uD83D\uDC69\u200D\uD83D\uDC69\u200D(?:\uD83D\uDC66\u200D\uD83D\uDC66|\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67]))|\uD83D\uDC68(?:\u200D(?:\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D)?\uD83D\uDC68|(?:\uD83D[\uDC68\uDC69])\u200D(?:\uD83D\uDC66\u200D\uD83D\uDC66|\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67]))|\uD83D\uDC66\u200D\uD83D\uDC66|\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67])|\uD83C[\uDF3E\uDF73\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDB0-\uDDB3])|(?:\uD83C[\uDFFB-\uDFFF])\u200D(?:\uD83C[\uDF3E\uDF73\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDB0-\uDDB3]))|\uD83D\uDC69\u200D(?:\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D(?:\uD83D[\uDC68\uDC69])|\uD83D[\uDC68\uDC69])|\uD83C[\uDF3E\uDF73\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDB0-\uDDB3])|\uD83D\uDC69\u200D\uD83D\uDC66\u200D\uD83D\uDC66|(?:\uD83D\uDC41\uFE0F\u200D\uD83D\uDDE8|\uD83D\uDC69(?:\uD83C[\uDFFB-\uDFFF])\u200D[\u2695\u2696\u2708]|\uD83D\uDC68(?:(?:\uD83C[\uDFFB-\uDFFF])\u200D[\u2695\u2696\u2708]|\u200D[\u2695\u2696\u2708])|(?:(?:\u26F9|\uD83C[\uDFCB\uDFCC]|\uD83D\uDD75)\uFE0F|\uD83D\uDC6F|\uD83E[\uDD3C\uDDDE\uDDDF])\u200D[\u2640\u2642]|(?:\u26F9|\uD83C[\uDFCB\uDFCC]|\uD83D\uDD75)(?:\uD83C[\uDFFB-\uDFFF])\u200D[\u2640\u2642]|(?:\uD83C[\uDFC3\uDFC4\uDFCA]|\uD83D[\uDC6E\uDC71\uDC73\uDC77\uDC81\uDC82\uDC86\uDC87\uDE45-\uDE47\uDE4B\uDE4D\uDE4E\uDEA3\uDEB4-\uDEB6]|\uD83E[\uDD26\uDD37-\uDD39\uDD3D\uDD3E\uDDB8\uDDB9\uDDD6-\uDDDD])(?:(?:\uD83C[\uDFFB-\uDFFF])\u200D[\u2640\u2642]|\u200D[\u2640\u2642])|\uD83D\uDC69\u200D[\u2695\u2696\u2708])\uFE0F|\uD83D\uDC69\u200D\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67])|\uD83D\uDC69\u200D\uD83D\uDC69\u200D(?:\uD83D[\uDC66\uDC67])|\uD83D\uDC68(?:\u200D(?:(?:\uD83D[\uDC68\uDC69])\u200D(?:\uD83D[\uDC66\uDC67])|\uD83D[\uDC66\uDC67])|\uD83C[\uDFFB-\uDFFF])|\uD83C\uDFF3\uFE0F\u200D\uD83C\uDF08|\uD83D\uDC69\u200D\uD83D\uDC67|\uD83D\uDC69(?:\uD83C[\uDFFB-\uDFFF])\u200D(?:\uD83C[\uDF3E\uDF73\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDB0-\uDDB3])|\uD83D\uDC69\u200D\uD83D\uDC66|\uD83C\uDDF6\uD83C\uDDE6|\uD83C\uDDFD\uD83C\uDDF0|\uD83C\uDDF4\uD83C\uDDF2|\uD83D\uDC69(?:\uD83C[\uDFFB-\uDFFF])|\uD83C\uDDED(?:\uD83C[\uDDF0\uDDF2\uDDF3\uDDF7\uDDF9\uDDFA])|\uD83C\uDDEC(?:\uD83C[\uDDE6\uDDE7\uDDE9-\uDDEE\uDDF1-\uDDF3\uDDF5-\uDDFA\uDDFC\uDDFE])|\uD83C\uDDEA(?:\uD83C[\uDDE6\uDDE8\uDDEA\uDDEC\uDDED\uDDF7-\uDDFA])|\uD83C\uDDE8(?:\uD83C[\uDDE6\uDDE8\uDDE9\uDDEB-\uDDEE\uDDF0-\uDDF5\uDDF7\uDDFA-\uDDFF])|\uD83C\uDDF2(?:\uD83C[\uDDE6\uDDE8-\uDDED\uDDF0-\uDDFF])|\uD83C\uDDF3(?:\uD83C[\uDDE6\uDDE8\uDDEA-\uDDEC\uDDEE\uDDF1\uDDF4\uDDF5\uDDF7\uDDFA\uDDFF])|\uD83C\uDDFC(?:\uD83C[\uDDEB\uDDF8])|\uD83C\uDDFA(?:\uD83C[\uDDE6\uDDEC\uDDF2\uDDF3\uDDF8\uDDFE\uDDFF])|\uD83C\uDDF0(?:\uD83C[\uDDEA\uDDEC-\uDDEE\uDDF2\uDDF3\uDDF5\uDDF7\uDDFC\uDDFE\uDDFF])|\uD83C\uDDEF(?:\uD83C[\uDDEA\uDDF2\uDDF4\uDDF5])|\uD83C\uDDF8(?:\uD83C[\uDDE6-\uDDEA\uDDEC-\uDDF4\uDDF7-\uDDF9\uDDFB\uDDFD-\uDDFF])|\uD83C\uDDEE(?:\uD83C[\uDDE8-\uDDEA\uDDF1-\uDDF4\uDDF6-\uDDF9])|\uD83C\uDDFF(?:\uD83C[\uDDE6\uDDF2\uDDFC])|\uD83C\uDDEB(?:\uD83C[\uDDEE-\uDDF0\uDDF2\uDDF4\uDDF7])|\uD83C\uDDF5(?:\uD83C[\uDDE6\uDDEA-\uDDED\uDDF0-\uDDF3\uDDF7-\uDDF9\uDDFC\uDDFE])|\uD83C\uDDE9(?:\uD83C[\uDDEA\uDDEC\uDDEF\uDDF0\uDDF2\uDDF4\uDDFF])|\uD83C\uDDF9(?:\uD83C[\uDDE6\uDDE8\uDDE9\uDDEB-\uDDED\uDDEF-\uDDF4\uDDF7\uDDF9\uDDFB\uDDFC\uDDFF])|\uD83C\uDDE7(?:\uD83C[\uDDE6\uDDE7\uDDE9-\uDDEF\uDDF1-\uDDF4\uDDF6-\uDDF9\uDDFB\uDDFC\uDDFE\uDDFF])|[#\*0-9]\uFE0F\u20E3|\uD83C\uDDF1(?:\uD83C[\uDDE6-\uDDE8\uDDEE\uDDF0\uDDF7-\uDDFB\uDDFE])|\uD83C\uDDE6(?:\uD83C[\uDDE8-\uDDEC\uDDEE\uDDF1\uDDF2\uDDF4\uDDF6-\uDDFA\uDDFC\uDDFD\uDDFF])|\uD83C\uDDF7(?:\uD83C[\uDDEA\uDDF4\uDDF8\uDDFA\uDDFC])|\uD83C\uDDFB(?:\uD83C[\uDDE6\uDDE8\uDDEA\uDDEC\uDDEE\uDDF3\uDDFA])|\uD83C\uDDFE(?:\uD83C[\uDDEA\uDDF9])|(?:\uD83C[\uDFC3\uDFC4\uDFCA]|\uD83D[\uDC6E\uDC71\uDC73\uDC77\uDC81\uDC82\uDC86\uDC87\uDE45-\uDE47\uDE4B\uDE4D\uDE4E\uDEA3\uDEB4-\uDEB6]|\uD83E[\uDD26\uDD37-\uDD39\uDD3D\uDD3E\uDDB8\uDDB9\uDDD6-\uDDDD])(?:\uD83C[\uDFFB-\uDFFF])|(?:\u26F9|\uD83C[\uDFCB\uDFCC]|\uD83D\uDD75)(?:\uD83C[\uDFFB-\uDFFF])|(?:[\u261D\u270A-\u270D]|\uD83C[\uDF85\uDFC2\uDFC7]|\uD83D[\uDC42\uDC43\uDC46-\uDC50\uDC66\uDC67\uDC70\uDC72\uDC74-\uDC76\uDC78\uDC7C\uDC83\uDC85\uDCAA\uDD74\uDD7A\uDD90\uDD95\uDD96\uDE4C\uDE4F\uDEC0\uDECC]|\uD83E[\uDD18-\uDD1C\uDD1E\uDD1F\uDD30-\uDD36\uDDB5\uDDB6\uDDD1-\uDDD5])(?:\uD83C[\uDFFB-\uDFFF])|(?:[\u231A\u231B\u23E9-\u23EC\u23F0\u23F3\u25FD\u25FE\u2614\u2615\u2648-\u2653\u267F\u2693\u26A1\u26AA\u26AB\u26BD\u26BE\u26C4\u26C5\u26CE\u26D4\u26EA\u26F2\u26F3\u26F5\u26FA\u26FD\u2705\u270A\u270B\u2728\u274C\u274E\u2753-\u2755\u2757\u2795-\u2797\u27B0\u27BF\u2B1B\u2B1C\u2B50\u2B55]|\uD83C[\uDC04\uDCCF\uDD8E\uDD91-\uDD9A\uDDE6-\uDDFF\uDE01\uDE1A\uDE2F\uDE32-\uDE36\uDE38-\uDE3A\uDE50\uDE51\uDF00-\uDF20\uDF2D-\uDF35\uDF37-\uDF7C\uDF7E-\uDF93\uDFA0-\uDFCA\uDFCF-\uDFD3\uDFE0-\uDFF0\uDFF4\uDFF8-\uDFFF]|\uD83D[\uDC00-\uDC3E\uDC40\uDC42-\uDCFC\uDCFF-\uDD3D\uDD4B-\uDD4E\uDD50-\uDD67\uDD7A\uDD95\uDD96\uDDA4\uDDFB-\uDE4F\uDE80-\uDEC5\uDECC\uDED0-\uDED2\uDEEB\uDEEC\uDEF4-\uDEF9]|\uD83E[\uDD10-\uDD3A\uDD3C-\uDD3E\uDD40-\uDD45\uDD47-\uDD70\uDD73-\uDD76\uDD7A\uDD7C-\uDDA2\uDDB0-\uDDB9\uDDC0-\uDDC2\uDDD0-\uDDFF])|(?:[#\*0-9\xA9\xAE\u203C\u2049\u2122\u2139\u2194-\u2199\u21A9\u21AA\u231A\u231B\u2328\u23CF\u23E9-\u23F3\u23F8-\u23FA\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB-\u25FE\u2600-\u2604\u260E\u2611\u2614\u2615\u2618\u261D\u2620\u2622\u2623\u2626\u262A\u262E\u262F\u2638-\u263A\u2640\u2642\u2648-\u2653\u265F\u2660\u2663\u2665\u2666\u2668\u267B\u267E\u267F\u2692-\u2697\u2699\u269B\u269C\u26A0\u26A1\u26AA\u26AB\u26B0\u26B1\u26BD\u26BE\u26C4\u26C5\u26C8\u26CE\u26CF\u26D1\u26D3\u26D4\u26E9\u26EA\u26F0-\u26F5\u26F7-\u26FA\u26FD\u2702\u2705\u2708-\u270D\u270F\u2712\u2714\u2716\u271D\u2721\u2728\u2733\u2734\u2744\u2747\u274C\u274E\u2753-\u2755\u2757\u2763\u2764\u2795-\u2797\u27A1\u27B0\u27BF\u2934\u2935\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u3030\u303D\u3297\u3299]|\uD83C[\uDC04\uDCCF\uDD70\uDD71\uDD7E\uDD7F\uDD8E\uDD91-\uDD9A\uDDE6-\uDDFF\uDE01\uDE02\uDE1A\uDE2F\uDE32-\uDE3A\uDE50\uDE51\uDF00-\uDF21\uDF24-\uDF93\uDF96\uDF97\uDF99-\uDF9B\uDF9E-\uDFF0\uDFF3-\uDFF5\uDFF7-\uDFFF]|\uD83D[\uDC00-\uDCFD\uDCFF-\uDD3D\uDD49-\uDD4E\uDD50-\uDD67\uDD6F\uDD70\uDD73-\uDD7A\uDD87\uDD8A-\uDD8D\uDD90\uDD95\uDD96\uDDA4\uDDA5\uDDA8\uDDB1\uDDB2\uDDBC\uDDC2-\uDDC4\uDDD1-\uDDD3\uDDDC-\uDDDE\uDDE1\uDDE3\uDDE8\uDDEF\uDDF3\uDDFA-\uDE4F\uDE80-\uDEC5\uDECB-\uDED2\uDEE0-\uDEE5\uDEE9\uDEEB\uDEEC\uDEF0\uDEF3-\uDEF9]|\uD83E[\uDD10-\uDD3A\uDD3C-\uDD3E\uDD40-\uDD45\uDD47-\uDD70\uDD73-\uDD76\uDD7A\uDD7C-\uDDA2\uDDB0-\uDDB9\uDDC0-\uDDC2\uDDD0-\uDDFF])\uFE0F|(?:[\u261D\u26F9\u270A-\u270D]|\uD83C[\uDF85\uDFC2-\uDFC4\uDFC7\uDFCA-\uDFCC]|\uD83D[\uDC42\uDC43\uDC46-\uDC50\uDC66-\uDC69\uDC6E\uDC70-\uDC78\uDC7C\uDC81-\uDC83\uDC85-\uDC87\uDCAA\uDD74\uDD75\uDD7A\uDD90\uDD95\uDD96\uDE45-\uDE47\uDE4B-\uDE4F\uDEA3\uDEB4-\uDEB6\uDEC0\uDECC]|\uD83E[\uDD18-\uDD1C\uDD1E\uDD1F\uDD26\uDD30-\uDD39\uDD3D\uDD3E\uDDB5\uDDB6\uDDB8\uDDB9\uDDD1-\uDDDD]))/;
+    // https://stackoverflow.com/questions/11381673/detecting-a-mobile-browser
+    var mobile_re = /(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i;
+    var tablet_re = /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i;
+    var format_split_re = /(\[\[(?:-?[@!gbiuso])*;[^;]*;[^\]]*\](?:[^\]\\]*(?:\\\\)*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]*)\]?)/i;
+    var format_parts_re = /\[\[((?:-?[@!gbiuso])*);([^;]*);([^;\]]*);?([^;\]]*);?([^\]]*)\]([^\]\\]*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]+)\]?/gi;
+    var format_re = /\[\[((?:-?[@!gbiuso])*;[^;\]]*;[^;\]]*(?:;|[^\]()]*);?[^\]]*)\]([^\]]*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]*)\]?/gi;
+    var format_exist_re = /\[\[((?:-?[@!gbiuso])*;[^;\]]*;[^;\]]*(?:;|[^\]()]*);?[^\]]*)\]([^\]]*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]*)\]/gi;
+    var format_full_re = /^(\[\[(?:(?:-?[@!gbiuso])*;[^;\]]*;[^;\]]*(?:;|[^\]()]*);?[^\]]*)\])([^\]]*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]*)(\])$/i;
+    var format_begin_re = /(\[\[(?:-?[@!gbiuso])*;[^;]*;[^\]]*\])/i;
+    var format_start_re = /^(\[\[(?:-?[@!gbiuso])*;[^;]*;[^\]]*\])/i;
+    var format_end_re = /\[\[(?:-?[@!gbiuso])*;[^;]*;[^\]]*\]?$/i;
+    var self_closing_re = /^(?:\[\[)?[^;]*@[^;]*;/;
+    var color_hex_re = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+    var url_re = /(\bhttps?:\/\/(?:(?:(?!&[^;]+;)|(?=&amp;))[^\s"'<>\][)])+)/gi;
+    var url_nf_re = /\b(?![^"\s[\]]*])(https?:\/\/(?:(?:(?!&[^;]+;)|(?=&amp;))[^\s"'<>\][)])+)/gi;
+    var email_re = /((([^<>('")[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,})))/g;
+    var url_full_re = /^(https?:\/\/(?:(?:(?!&[^;]+;)|(?=&amp;))[^\s"'<>\][)])+)$/gi;
+    var email_full_re = /^((([^<>('")[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,})))$/g;
+    var command_re = /((?:"[^"\\]*(?:\\[\S\s][^"\\]*)*"|'[^'\\]*(?:\\[\S\s][^'\\]*)*'|\/[^\/\\]*(?:\\[\S\s][^\/\\]*)*\/[gimsuy]*(?=\s|$)|(?:\\\s|\S))+)(?=\s|$)/gi;
+    var extended_command_re = /^\s*((terminal|cmd)::([a-z_]+)\(([\s\S]*)\))\s*$/;
+    var format_exec_re = /(\[\[(?:[^\][]|\\\])+\]\])/;
+    var float_re = /^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$/;
+    var re_re = /^\/((?:\\\/|[^/]|\[[^\]]*\/[^\]]*\])+)\/([gimsuy]*)$/;
+    var string_re = /("(?:[^"\\]|\\(?:\\\\)*"|\\\\)*"|'(?:[^'\\]|\\(?:\\\\)*'|\\\\)*')/;
+    var unclosed_strings_re = /^(?=((?:[^"']+|"[^"\\]*(?:\\[^][^"\\]*)*"|'[^'\\]*(?:\\[^][^'\\]*)*')*))\1./;
+    var broken_image = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 14"><title id="title2">rounded</title><path id="terminal-broken-image" d="m 14,10 h 2 v 1 a 3,3 0 0 1 -3,3 H 3 A 3,3 0 0 1 0,11 H 4.5 A 1.00012,1.00012 0 0 0 5.207,10.707 L 6.5,9.414 7.793,10.707 a 0.99963,0.99963 0 0 0 1.41406,0 l 2.36719,-2.36719 1.80127,1.44092 A 0.99807,0.99807 0 0 0 14,10 Z M 16,3 V 8 H 14.35059 L 12.12451,6.21924 A 0.99846,0.99846 0 0 0 10.793,6.293 L 8.5,8.586 7.207,7.293 a 0.99962,0.99962 0 0 0 -1.41406,0 L 4.08594,9 H 0 V 3 A 3,3 0 0 1 3,0 h 10 a 3,3 0 0 1 3,3 z M 6,4.5 A 1.5,1.5 0 1 0 4.5,6 1.5,1.5 0 0 0 6,4.5 Z" /></svg>';
+    var use_broken_image = '<svg class="terminal-broken-image" role="presentation" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 14" xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="#terminal-broken-image"/></svg>';
+    /* eslint-enable */
+    // -------------------------------------------------------------------------
+    // :: features flags
+    // -------------------------------------------------------------------------
+    // taken from https://hacks.mozilla.org/2011/09/detecting-and-generating-
+    // css-animations-in-javascript/
+    var animation_supported = (function() {
+        var animation = false,
+            domPrefixes = 'Webkit Moz O ms Khtml'.split(' '),
+            elm = document.createElement('div');
+        if (elm.style.animationName) {
+            animation = true;
+        }
+        if (animation === false) {
+            for (var i = 0; i < domPrefixes.length; i++) {
+                var name = domPrefixes[i] + 'AnimationName';
+                if (elm.style[name] !== undefined) {
+                    animation = true;
+                    break;
+                }
+            }
+        }
+        elm = null;
+        return animation;
+    })();
+    // -------------------------------------------------------------------------
+    var agent = window.navigator.userAgent;
+    var is_IE = /MSIE|Trident/.test(agent) || /rv:11.0/i.test(agent);
+    var is_IEMobile = /IEMobile/.test(agent);
+    // -------------------------------------------------------------------------
+    var is_ch_unit_supported = (function() {
+        if (is_IE && !is_IEMobile) {
+            return false;
+        }
+        var div = document.createElement('div');
+        div.style.width = '1ch';
+        return div.style.width === '1ch';
+    })();
+    // -------------------------------------------------------------------------
+    var is_css_variables_supported = window.CSS && window.CSS.supports &&
+            window.CSS.supports('--fake-var', 0);
+    // -------------------------------------------------------------------------
+    var is_android = navigator.userAgent.toLowerCase().indexOf('android') !== -1;
+    // -------------------------------------------------------------------------
+    var is_key_native = (function is_key_native() {
+        if (!('KeyboardEvent' in window && 'key' in window.KeyboardEvent.prototype)) {
+            return false;
+        }
+        var proto = window.KeyboardEvent.prototype;
+        var get = Object.getOwnPropertyDescriptor(proto, 'key').get;
+        return !!get.toString().match(/\[native code\]/);
+    })();
+    // -------------------------------------------------------------------------
+    var is_mobile = (function(a) {
+        var check = false;
+        if (mobile_re.test(a) || tablet_re.test(a.substr(0, 4))) {
+            check = true;
+        }
+        return check;
+    })(navigator.userAgent || navigator.vendor || window.opera);
+
+    // -------------------------------------------------------------------------
+    // IE ch unit bug detection - better that UserAgent that can be changed
+    // -------------------------------------------------------------------------
+    var ch_unit_bug = false;
+    $(function() {
+        function width(e) {
+            return e[0].getBoundingClientRect().width;
+        }
+        var base = '<span style="font-family: monospace;visibility:hidden;';
+        var ch = $(base + 'width:1ch;overflow: hidden">&nbsp;</span>').appendTo('body');
+        var space = $(base + '">&nbsp;</span>').appendTo('body');
+        ch_unit_bug = width(ch) !== width(space);
+        ch.remove();
+        space.remove();
+    });
+    // -----------------------------------------------------------------------
+    // :: css helper that work with css variables
+    // :: jQuery css method from 3.4 support them by default
+    // -----------------------------------------------------------------------
+    function css(node, obj, value) {
+        if ($.isPlainObject(obj)) {
+            Object.keys(obj).forEach(function(key) {
+                node.style.setProperty(key, obj[key]);
+            });
+        } else if (typeof value === 'undefined') {
+            return node.style.getPropertyValue(obj);
+        } else {
+            node.style.setProperty(obj, value);
+        }
+    }
     // -----------------------------------------------------------------------
     // :: hide elements from screen readers
     // -----------------------------------------------------------------------
@@ -851,10 +1248,17 @@
     // ---------------------------------------------------------------------
     var excepctions = [];
     function alert_exception(label, e) {
+        if (arguments[0] instanceof $.terminal.Exception) {
+            label = arguments[0].type;
+            e = arguments[0];
+        }
         var message = (label ? label + ': ' : '') + exception_message(e);
         if (excepctions.indexOf(message) === -1) {
             excepctions.push(message);
-            alert(message + (e.stack ? '\n' + e.stack : ''));
+            setTimeout(function() {
+                throw e;
+            }, 0);
+            //alert(message + (e.stack ? '\n' + e.stack : ''));
         }
     }
     // ---------------------------------------------------------------------
@@ -889,7 +1293,12 @@
             index: function() {
                 return pos;
             },
-            rotate: function(skip) {
+            rotate: function(skip, init) {
+                if (init === undefined) {
+                    init = pos;
+                } else if (init === pos) {
+                    return;
+                }
                 if (!skip) {
                     var defined = data.filter(function(item) {
                         return typeof item !== 'undefined';
@@ -912,7 +1321,7 @@
                     if (typeof data[pos] !== 'undefined') {
                         return data[pos];
                     } else {
-                        return this.rotate(true);
+                        return this.rotate(true, init);
                     }
                 }
             },
@@ -969,11 +1378,18 @@
             }
         });
     }
+    /*
+    function time() {
+        // performance.now almost equal Date.now()- performance.timing.navigationStart
+        // the difference check should be almost the same
+        return performance ? performance.now() : Date.now();
+    }
+    */
     // -----------------------------------------------------------------------
     // :: STACK DATA STRUCTURE
     // -----------------------------------------------------------------------
     function Stack(init) {
-        var data = init instanceof Array ? init : init ? [init] : [];
+        var data = is_array(init) ? init : init ? [init] : [];
         $.extend(this, {
             data: function() {
                 return data;
@@ -1005,6 +1421,44 @@
             }
         });
     }
+    // -------------------------------------------------------------------------
+    // :: Class for Worker that do some computation when needed
+    // :: if validation function return false it mean that condition changed
+    // :: and cache need to be cleared. If value was not prcessed it will run
+    // :: the action
+    // -------------------------------------------------------------------------
+    function WorkerCache(options) {
+        var settings = $.extend({
+            validation: $.noop,
+            action: $.noop,
+            onCache: $.noop
+        }, options);
+        this._onCache = settings.onCache.bind(this);
+        this._action = settings.action.bind(this);
+        this._validation = settings.validation.bind(this);
+        this._cache = new Map();
+    }
+    // -------------------------------------------------------------------------
+    WorkerCache.prototype.validate = function(key) {
+        var valid = this._validation(key);
+        var test = valid === undefined || valid === true;
+        if (!test) {
+            this._cache.clear();
+        }
+        return test;
+    };
+    // -------------------------------------------------------------------------
+    WorkerCache.prototype.get = function(key) {
+        var value;
+        if (this.validate(key) && this._cache.has(key)) {
+            value = this._cache.get(key);
+            this._onCache({cache: value});
+            return value;
+        }
+        value = this._action(key);
+        this._cache.set(key, value);
+        return value;
+    };
     // -------------------------------------------------------------------------
     // :: HISTORY CLASS
     // -------------------------------------------------------------------------
@@ -1039,7 +1493,7 @@
                 }
             },
             set: function(new_data) {
-                if (new_data instanceof Array) {
+                if (is_array(new_data)) {
                     data = new_data;
                     if (!memory) {
                         $.Storage.set(storage_key, JSON.stringify(data));
@@ -1123,14 +1577,24 @@
             history: true,
             onPositionChange: $.noop,
             onCommandChange: $.noop,
+            inputStyle: 'textarea',
+            mobileDelete: is_mobile,
+            onPaste: $.noop,
             clickTimeout: 200,
             holdTimeout: 400,
             holdRepeatTimeout: 200,
+            mobileIngoreAutoSpace: [],
+            repeatTimeoutKeys: [],
+            tabindex: 1,
             tabs: 4
         }
     };
     $.fn.cmd = function(options) {
         var settings = $.extend({}, $.cmd.defaults, options);
+        function mobile_ignore_key(key) {
+            return settings.mobileIngoreAutoSpace.length &&
+                settings.mobileIngoreAutoSpace.indexOf(key) !== -1 && is_android;
+        }
         var self = this;
         var maybe_data = self.data('cmd');
         if (maybe_data) {
@@ -1138,34 +1602,133 @@
         }
         var id = cmd_index++;
         self.addClass('cmd');
-        self.append('<span class="prompt"></span>');
-        self.append('<div class="cursor-line">' +
-                    '<span></span>' +
-                    '<span class="cursor">&nbsp;</span>' +
-                    '<span></span>' +
-                    '</div>');
+        var wrapper = $('<div class="cmd-wrapper"/>').appendTo(self);
+        wrapper.append('<span class="cmd-prompt"></span>');
+        wrapper.append('<div class="cmd-cursor-line">' +
+                       '<span></span>' +
+                       '<span class="cmd-cursor"><span>' +
+                       '<span>&nbsp;</span></span></span>' +
+                       '<span></span>' +
+                       '</div>');
         // a11y: don't read command it's in textarea that's in focus
-        a11y_hide(self.find('.cursor-line'));
+        a11y_hide(wrapper.find('.cmd-cursor-line'));
         // on mobile the only way to hide textarea on desktop it's needed because
         // textarea show up after focus
         //self.append('<span class="mask"></mask>');
-        var clip = $('<textarea>').attr({
-            autocapitalize: 'off',
-            spellcheck: 'false',
-            tabindex: 1
-        }).addClass('clipboard').appendTo(self).val(' ');
+        var clip;
+        if (is_mobile) {
+            clip = (function() {
+                var $node = $('<div class="cmd-editable" contenteditable/>').attr({
+                    autocapitalize: 'off',
+                    autocorrect: 'off',
+                    spellcheck: 'false',
+                    tabindex: settings.tabindex
+                }).insertAfter(self);
+                $node.on('focus', function() {
+                    self.enable();
+                }).on('blur', function() {
+                    self.disable();
+                });
+                var timer;
+                var clip = {
+                    $node: $node,
+                    val: function(value) {
+                        if (typeof value === 'undefined') {
+                            return $node.text();
+                        } else {
+                            $node.html(value);
+                        }
+                    },
+                    reset: function() {
+                        clearTimeout(timer);
+                        timer = setTimeout(function() {
+                            $node.css('top', '');
+                        }, 400);
+                    },
+                    focus: function() {
+                        $node.css('top', 0);
+                        clip.reset();
+                    },
+                    blur: function() {
+                        $node.css('top', '100%').blur();
+                        // just in case of Webkit bug
+                        window.getSelection().removeAllRanges();
+                        clip.reset();
+                    }
+                };
+                return clip;
+            })();
+            self.addClass('cmd-mobile');
+        } else {
+            clip = (function() {
+                var $node = $('<textarea>').attr({
+                    autocapitalize: 'off',
+                    spellcheck: 'false',
+                    tabindex: settings.tabindex
+                }).addClass('cmd-clipboard').appendTo(self);
+                return {
+                    $node: $node,
+                    val: function(value) {
+                        // even if value is undeifned
+                        // when calling val(value) it return jQuery object
+                        if (typeof value === 'undefined') {
+                            return $node.val();
+                        } else {
+                            return $node.val(value);
+                        }
+                    }
+                };
+            })();
+            clip.val(' ');
+        }
         if (settings.width) {
             self.width(settings.width);
         }
-        var num_chars; // calculated by draw_prompt
+        var num_chars; // calculated by resize
+        var char_width;
         var last_rendered_prompt;
         var prompt_last_line;
         var prompt_len;
-        var prompt_node = self.find('.prompt');
+        var prompt_node = self.find('.cmd-prompt');
         var reverse_search = false;
         var rev_search_str = '';
         var reverse_search_position = null;
         var backup_prompt;
+        // TODO: try to use workerCache with data that don't change like bare_text
+        // or format function.
+        // TODO: remove workerCache for formatters they require dynamic
+        // value of position so data change when you move cursor
+        /*
+        var formatter = new WorkerCache({
+            validation: function() {
+                if (this._formatters instanceof Array) {
+                    var test = this._formatters.every(function(e, i) {
+                        return $.terminal.defaults.formatters[i] === e;
+                    });
+                    if (!test) {
+                        this._formatters = $.terminal.defaults.formatters;
+                    }
+                    return test;
+                }
+                return true;
+            },
+            onCache: function(value) {
+                this._counter = this._counter || 0;
+                this._counter++;
+            },
+            action: function(string) {
+                this._times = this._times || [];
+                var t0 = time();
+                // some optimization - don't change object shape and ref
+                format_options.position = position;
+                string = $.terminal.escape_formatting(string);
+                var value = $.terminal.apply_formatters(string, format_options);
+                var t1 = time();
+                this._times.push(t1 - t0);
+                return value;
+            }
+        });
+        */
         var command = '';
         var last_command;
         // text from selection using CTRL+SHIFT+C (as in Xterm)
@@ -1175,44 +1738,52 @@
         var enabled;
         var formatted_position = 0;
         var name, history;
-        var cursor = self.find('.cursor');
+        var cursor = self.find('.cmd-cursor');
         var animation;
         var restart_animation;
         var paste_count = 0;
+        // use \uFFFF to mark newline extra character
+        // so we can hide it by css when using text selection
+        var line_marker = '\uFFFF';
+        var line_marker_re = /\uFFFF$/;
         function get_char_pos(e) {
             var node = $(e.target);
-            if (node.is('span')) {
+            if (node.is('span,img,a')) {
                 node = node.closest('[data-text]');
                 return node.index() +
                     node.parent('span').prevAll().find('[data-text]').length +
                     node.closest('[role="presentation"]')
-                        .prevUntil('.prompt').find('[data-text]').length;
+                        .prevUntil('.cmd-prompt').find('[data-text]').length;
             } else if (node.is('div[role="presentation"]')) {
-                var last = !node.nextUntil('textarea').length;
-                return node.find('span[data-text]').length +
-                    node.prevUntil('.prompt').find('span[data-text]').length -
+                var last = !node.next().length;
+                return node.find('[data-text]').length +
+                    node.prevUntil('.cmd-prompt').find('[data-text]').length -
                     (last ? 0 : 1);
             }
         }
         // IE mapping
         var key_mapping = {
             'SPACEBAR': ' ',
-            'UP': 'ARROWUP',
-            'DOWN': 'ARROWDOWN',
-            'LEFT': 'ARROWLEFT',
-            'RIGHT': 'ARROWRIGHT',
-            'DEL': 'DELETE',
+            'UP': 'ArrowUP',
+            'DOWN': 'ArrowDown',
+            'LEFT': 'ArrowLeft',
+            'RIGHT': 'ArrowRight',
+            'DEL': 'Delete',
             'MULTIPLY': '*',
             'DIVIDE': '/',
             'SUBTRACT': '-',
             'ADD': '+'
         };
+        function ie_key_fix(e) {
+            var key = e.key.toUpperCase();
+            if (key_mapping[key]) {
+                return key_mapping[key];
+            }
+            return key;
+        }
         function get_key(e) {
             if (e.key) {
-                var key = e.key.toUpperCase();
-                if (key_mapping[key]) {
-                    key = key_mapping[key];
-                }
+                var key = ie_key_fix(e).toUpperCase();
                 if (key === 'CONTROL') {
                     return 'CTRL';
                 } else {
@@ -1239,18 +1810,113 @@
                 }
             }
         }
+        // -----------------------------------------------------------------
+        // for invoking shortcuts using terminal::keydown
+        // taken from https://github.com/cvan/keyboardevent-key-polyfill/
+        var keycodes = {
+            3: 'Cancel',
+            6: 'Help',
+            8: 'Backspace',
+            9: 'Tab',
+            12: 'Clear',
+            13: 'Enter',
+            16: 'Shift',
+            17: 'Control',
+            18: 'Alt',
+            19: 'Pause',
+            20: 'CapsLock',
+            27: 'Escape',
+            28: 'Convert',
+            29: 'NonConvert',
+            30: 'Accept',
+            31: 'ModeChange',
+            32: ' ',
+            33: 'PageUp',
+            34: 'PageDown',
+            35: 'End',
+            36: 'Home',
+            37: 'ArrowLeft',
+            38: 'ArrowUp',
+            39: 'ArrowRight',
+            40: 'ArrowDown',
+            41: 'Select',
+            42: 'Print',
+            43: 'Execute',
+            44: 'PrintScreen',
+            45: 'Insert',
+            46: 'Delete',
+            48: ['0', ')'],
+            49: ['1', '!'],
+            50: ['2', '@'],
+            51: ['3', '#'],
+            52: ['4', '$'],
+            53: ['5', '%'],
+            54: ['6', '^'],
+            55: ['7', '&'],
+            56: ['8', '*'],
+            57: ['9', '('],
+            91: 'OS',
+            93: 'ContextMenu',
+            144: 'NumLock',
+            145: 'ScrollLock',
+            181: 'VolumeMute',
+            182: 'VolumeDown',
+            183: 'VolumeUp',
+            186: [';', ':'],
+            187: ['=', '+'],
+            188: [',', '<'],
+            189: ['-', '_'],
+            190: ['.', '>'],
+            191: ['/', '?'],
+            192: ['`', '~'],
+            219: ['[', '{'],
+            220: ['\\', '|'],
+            221: [']', '}'],
+            222: ["'", '"'],
+            224: 'Meta',
+            225: 'AltGraph',
+            246: 'Attn',
+            247: 'CrSel',
+            248: 'ExSel',
+            249: 'EraseEof',
+            250: 'Play',
+            251: 'ZoomOut'
+        };
+        var i;
+        // Function keys (F1-24).
+        for (i = 1; i < 25; i++) {
+            keycodes[111 + i] = 'F' + i;
+        }
+        // Printable ASCII characters.
+        var letter = '';
+        for (i = 65; i < 91; i++) {
+            letter = String.fromCharCode(i);
+            keycodes[i] = [letter.toLowerCase(), letter.toUpperCase()];
+        }
+        var reversed_keycodes = {};
+        Object.keys(keycodes).forEach(function(which) {
+            if (is_array(keycodes[which])) {
+                keycodes[which].forEach(function(key) {
+                    reversed_keycodes[key.toUpperCase()] = which;
+                });
+            } else {
+                reversed_keycodes[keycodes[which].toUpperCase()] = which;
+            }
+        });
+        // -----------------------------------------------------------------
         var keymap;
         var default_keymap = {
-            'ALT+D': delete_word(true),
-            'HOLD+DELETE': delete_word(false),
-            'HOLD+SHIFT+DELETE': delete_word(false),
+            'ALT+D': delete_forward({clipboard: true}),
+            'HOLD+ALT+D': delete_forward({clipboard: true, hold: true}),
+            'HOLD+DELETE': delete_forward({clipboard: false, hold: true}),
+            'HOLD+SHIFT+DELETE': delete_forward({clipboard: false, hold: true}),
             'ENTER': function() {
                 if (history && command && !settings.mask &&
-                    (is_function(settings.historyFilter) &&
-                     settings.historyFilter(command)) ||
-                    (settings.historyFilter instanceof RegExp &&
-                     command.match(settings.historyFilter)) ||
-                    !settings.historyFilter) {
+                    ((is_function(settings.historyFilter) &&
+                      settings.historyFilter(command)) ||
+                     (settings.historyFilter instanceof RegExp &&
+                      command.match(settings.historyFilter)) ||
+                     !settings.historyFilter)) {
                     history.append(command);
                 }
                 var tmp = command;
@@ -1261,11 +1927,16 @@
                 no_keydown = true;
 
                 self.set('');
+                var promise;
                 if (settings.commands) {
-                    settings.commands.call(self, tmp);
+                    promise = settings.commands.call(self, tmp);
                 }
                 if (is_function(prompt)) {
-                    draw_prompt();
+                    if (promise && is_function(promise.then)) {
+                        promise.then(draw_prompt);
+                    } else {
+                        draw_prompt();
+                    }
                 }
                 clip.val('');
                 return false;
@@ -1287,12 +1958,14 @@
                 self['delete'](1);
                 return true;
             },
-            'ARROWUP': prev_history,
+            'HOLD+ARROWUP': up_arrow,
+            'ARROWUP': up_arrow,
             'CTRL+P': prev_history,
-            'ARROWDOWN': next_history,
+            'ARROWDOWN': down_arrow,
+            'HOLD+ARROWDOWN': down_arrow,
             'CTRL+N': next_history,
             'ARROWLEFT': left,
-            'HOLD+ARROWLEFT': left,
+            'HOLD+ARROWLEFT': debounce(left, 10),
             'CTRL+B': left,
             'CTRL+ARROWLEFT': function() {
                 // jump to one character after last space before prevoius word
@@ -1338,7 +2011,7 @@
                 }
             },
             'ARROWRIGHT': right,
-            'HOLD+ARROWRIGHT': right,
+            'HOLD+ARROWRIGHT': debounce(right, 10),
             'CTRL+F': right,
             'CTRL+ARROWRIGHT': function() {
                 // jump to beginning or end of the word
@@ -1348,7 +2021,7 @@
                 var re = /\S[\n\s]{2,}|[\n\s]+\S?/;
                 var match = command.slice(position).match(re);
                 if (!match || match[0].match(/^\s+$/)) {
-                    self.position(command.length);
+                    self.position(bare_text(command).length);
                 } else if (match[0][0] !== ' ') {
                     position += match.index + 1;
                 } else {
@@ -1360,15 +2033,17 @@
                 redraw();
             },
             'F12': return_true, // Allow Firebug
-            'END': end,
-            'CTRL+E': end,
-            'HOME': home,
-            'CTRL+A': home,
+            'END': end(true),
+            'CTRL+END': end(),
+            'CTRL+E': end(),
+            'HOME': home(true),
+            'CTRL+HOME': home(),
+            'CTRL+A': home(),
             'SHIFT+INSERT': paste_event,
             'CTRL+SHIFT+T': return_true, // open closed tab
-            'CTRL+W': delete_word_backward(true),
-            'HOLD+BACKSPACE': delete_word_backward(false),
-            'HOLD+SHIFT+BACKSPACE': delete_word_backward(false),
+            'CTRL+W': delete_backward({clipboard: true, hold: false}),
+            'HOLD+BACKSPACE': delete_backward({clipboard: false, hold: true}),
+            'HOLD+SHIFT+BACKSPACE': delete_backward({clipboard: false, hold: true}),
             'CTRL+H': function() {
                 if (command !== '' && position > 0) {
                     self['delete'](-1);
@@ -1376,7 +2051,9 @@
                 return false;
             },
             'CTRL+X': return_true,
-            'CTRL+C': return_true,
+            'CTRL+C': function() {
+                return get_selected_html() === '';
+            },
             'CTRL+T': return_true,
             'CTRL+Y': function() {
                 if (kill_text !== '') {
@@ -1386,16 +2063,17 @@
             'CTRL+V': paste_event,
             'META+V': paste_event,
             'CTRL+K': function() {
-                if (command.length - position) {
-                    kill_text = self['delete'](command.length - position);
-                    text_to_clipboard(self, kill_text);
+                var len = text(command).length;
+                if (len > position) {
+                    kill_text = self['delete'](len - position);
+                    text_to_clipboard(clip.$node, kill_text);
                 }
                 return false;
             },
             'CTRL+U': function() {
                 if (command !== '' && position !== 0) {
                     kill_text = self['delete'](-position);
-                    text_to_clipboard(self, kill_text);
+                    text_to_clipboard(clip.$node, kill_text);
                 }
                 return false;
             },
@@ -1407,15 +2085,22 @@
             'META+L': return_true // CLD+L jump into Ominbox on Chrome Mac
         };
         // -------------------------------------------------------------------------------
-        function delete_word(clipboard) {
-            return function delete_word() {
+        function delete_forward(options) {
+            options = options || {};
+            if (options.hold && !settings.mobileDelete) {
+                return function delete_character_forward() {
+                    self['delete'](1);
+                    return false;
+                };
+            }
+            return function delete_word_forward() {
                 var re = / *[^ ]+ *(?= )|[^ ]+$/;
                 var substring = command.slice(position);
                 var m = substring.match(re);
                 if (m) {
                     kill_text = m[0];
-                    if (clipboard) {
-                        text_to_clipboard(self, kill_text);
+                    if (options.clipboard) {
+                        text_to_clipboard(clip, kill_text);
                     }
                 }
                 self.set(
@@ -1428,15 +2113,21 @@
             };
         }
         // -------------------------------------------------------------------------------
-        function delete_word_backward(clipboard) {
+        function delete_backward(options) {
+            options = options || {};
+            if (options.hold && !settings.mobileDelete) {
+                return function delete_character_backward() {
+                    self['delete'](-1);
+                };
+            }
             return function delete_word_backward() {
                 // don't work in Chromium (can't prevent close tab)
                 if (command !== '' && position !== 0) {
-                    var m = command.slice(0, position).match(/([^ ]+ *$)/);
+                    var m = command.slice(0, position).match(/([^ ]* *$)/);
                     if (m[0].length) {
                         kill_text = self['delete'](-m[0].length);
-                        if (clipboard) {
-                            text_to_clipboard(self, kill_text);
+                        if (options.clipboard) {
+                            text_to_clipboard(clip, kill_text);
                         }
                     }
                 }
@@ -1451,11 +2142,50 @@
         function paste_event() {
             clip.val('');
             paste_count = 0;
-            if (self.isenabled() && !clip.is(':focus')) {
-                clip.trigger('focus', [true]);
+            if (self.isenabled() && !clip.$node.is(':focus')) {
+                clip.$node.trigger('focus', [true]);
             }
-            clip.one('input', paste);
+            clip.$node.one('input', paste);
             return true;
+        }
+        // ---------------------------------------------------------------------
+        // :: Paste content to terminal using hidden textarea
+        // ---------------------------------------------------------------------
+        function paste() {
+            if (paste_count++ > 0) {
+                return;
+            }
+            function set() {
+                clip.val(command);
+                fix_textarea();
+            }
+            function insert(text) {
+                self.insert(text);
+                set();
+            }
+            if (self.isenabled()) {
+                //wait until Browser insert text to textarea
+                self.oneTime(100, function() {
+                    var value = clip.val();
+                    if (is_function(settings.onPaste)) {
+                        var ret = settings.onPaste.call(self, {
+                            target: self,
+                            text: value
+                        });
+                        if (ret !== undefined) {
+                            if (ret && is_function(ret.then || ret.done)) {
+                                (ret.then || ret.done).call(ret, insert);
+                            } else if (typeof ret === 'string') {
+                                insert(ret);
+                            } else if (ret === false) {
+                                set();
+                            }
+                            return;
+                        }
+                    }
+                    insert(value);
+                });
+            }
         }
         // -------------------------------------------------------------------------------
         function prev_history() {
@@ -1472,6 +2202,80 @@
         function next_history() {
             self.set(history.end() ? last_command : history.next());
             return false;
+        }
+        // -------------------------------------------------------------------------------
+        function have_newlines(string) {
+            return string.match(/\n/);
+        }
+        // -------------------------------------------------------------------------------
+        function have_wrapping(string) {
+            var lengths = string.split('\n').map(function(line) {
+                return $.terminal.length(line);
+            });
+            var wrap = lengths.filter(function(len) {
+                return len > num_chars;
+            });
+            return !!wrap.length;
+        }
+        // -------------------------------------------------------------------------------
+        function match_column(re, string, col) {
+            var match = string.match(re);
+            if (have_newlines(string)) {
+                return match && (match[1].length % num_chars) <= col;
+            } else {
+                return match && (match[1].length % num_chars) <= col - prompt_len;
+            }
+        }
+        // -------------------------------------------------------------------------------
+        function up_arrow() {
+            var before = command.substring(0, position);
+            var re = /\n?([^\n]+)$/;
+            var col = self.column();
+            if (have_newlines(before) || have_wrapping(before)) {
+                for (var i = before.length - col - 1; i--;) {
+                    if (before[i] === '\n') {
+                        break;
+                    }
+                    var str = before.substring(0, i);
+                    if (match_column(re, str, col)) {
+                        break;
+                    }
+                }
+                self.position(i);
+                return false;
+            } else {
+                return prev_history();
+            }
+        }
+        // -------------------------------------------------------------------------------
+        function down_arrow() {
+            var after = command.substring(position);
+            var col = self.column();
+            if (have_newlines(after) || have_wrapping(after)) {
+                var match = after.match(/^([^\n]*)(\n?)([^\n]*)/);
+                if (match) {
+                    var before = command.substring(0, position);
+                    var before_newline = match[1].length;
+                    var include_prompt = !have_newlines(before) && !have_wrapping(before);
+                    var pos;
+                    if (before_newline > num_chars) {
+                        // full length of terminal will position into same place below
+                        pos = num_chars;
+                    } else if (!match[2]) {
+                        return next_history();
+                    } else {
+                        pos = before_newline + col + 1; // count newline
+                        if (include_prompt) {
+                            pos += prompt_len;
+                        }
+                    }
+                    // relative position
+                    self.position(pos, true);
+                }
+                return false;
+            } else {
+                return next_history();
+            }
         }
         // -------------------------------------------------------------------------------
         function backspace_key() {
@@ -1492,39 +2296,74 @@
         function left() {
             if (position > 0) {
                 self.position(-1, true);
-                redraw();
             }
         }
         // -------------------------------------------------------------------------------
         function right() {
-            if (position < command.length) {
+            if (position < bare_text(command).length) {
                 self.position(1, true);
             }
             return false;
         }
         // -------------------------------------------------------------------------------
-        function home() {
-            self.position(0);
+        function home(line) {
+            function home() {
+                self.position(0);
+            }
+            if (line) {
+                return function() {
+                    if (command.match(/\n/)) {
+                        var string = command.substring(0, self.position());
+                        self.position(string.lastIndexOf('\n') + 1);
+                    } else {
+                        home();
+                    }
+                };
+            } else {
+                return home;
+            }
         }
         // -------------------------------------------------------------------------------
-        function end() {
-            self.position(command.length);
+        function end(line) {
+            function end() {
+                self.position(text(command).length);
+            }
+            if (line) {
+                return function() {
+                    if (command.match(/\n/)) {
+                        var lines = command.split('\n');
+                        var pos = self.position();
+                        var sum = 0;
+                        for (var i = 0; i < lines.length; ++i) {
+                            sum += lines[i].length;
+                            if (sum > pos) {
+                                self.position(sum + i);
+                                return;
+                            }
+                        }
+                    }
+                    end();
+                };
+            } else {
+                return end;
+            }
         }
         // -------------------------------------------------------------------------------
         function mobile_focus() {
             //if (is_touch) {
-            var focus = clip.is(':focus');
+            var $clip = clip.$node;
+            var focus = $clip.is(':focus');
             if (enabled) {
                 if (!focus) {
                     //clip.trigger('focus', [true]);
                 }
                 self.oneTime(10, function() {
-                    if (!clip.is(':focus') && enabled) {
-                        clip.trigger('focus', [true]);
+                    if (!$clip.is(':focus') && enabled) {
+                        $clip.trigger('focus', [true]);
                     }
                 });
-            } else if (focus && (is_mobile || !enabled)) {
-                clip.trigger('blur', [true]);
+            } else if (focus && !enabled) {
+                $clip.trigger('blur', [true]);
             }
         }
         // -------------------------------------------------------------------------------
@@ -1546,7 +2385,8 @@
                         _class += ' ' + className;
                     }
                 }
-                if (_class !== self.attr('class')) {
+                _class = _class.replace(/\s+/g, ' ');
+                if (_class !== self.attr('class').replace(/\s+/g, ' ')) {
                     self.attr('class', _class);
                 }
             }
@@ -1564,15 +2404,15 @@
             self.oneTime(10, function() {
                 // we use space before command to show select all context menu
                 // idea taken from CodeMirror
-                if (clip.val() !== command && !position_only) {
+                if (!is_mobile && clip.val() !== command && !position_only) {
                     clip.val(' ' + command);
                 }
                 if (enabled) {
                     self.oneTime(10, function() {
                         try {
                             // we check first to improve performance
-                            if (clip.caret() !== position + 1) {
-                                clip.caret(position + 1);
+                            if (clip.$node.caret() !== position + 1) {
+                                clip.$node.caret(position + 1);
                             }
                         } catch (e) {
                             // firefox throw NS_ERROR_FAILURE ignore
@@ -1588,9 +2428,9 @@
         if (animation_supported && !is_android) {
             animation = function(toggle) {
                 if (toggle) {
-                    cursor.addClass('blink');
+                    cursor.addClass('cmd-blink');
                 } else {
-                    cursor.removeClass('blink');
+                    cursor.removeClass('cmd-blink');
                 }
             };
             restart_animation = function() {
@@ -1604,12 +2444,12 @@
             animation = function(toggle) {
                 if (toggle && !animating) {
                     animating = true;
-                    cursor.addClass('inverted blink');
+                    cursor.addClass('cmd-inverted cmd-blink');
                     self.everyTime(500, 'blink', blink);
                 } else if (animating && !toggle) {
                     animating = false;
                     self.stopTime('blink', blink);
-                    cursor.removeClass('inverted blink');
+                    cursor.removeClass('cmd-inverted cmd-blink');
                 }
             };
             restart_animation = function() {
@@ -1621,7 +2461,7 @@
         // :: Blinking cursor function
         // ---------------------------------------------------------------------
         function blink() {
-            cursor.toggleClass('inverted');
+            cursor.toggleClass('cmd-inverted');
         }
         // ---------------------------------------------------------------------
         // :: Set prompt for reverse search
@@ -1653,7 +2493,7 @@
             }
             if (rev_search_str.length > 0) {
                 for (var j = rev_search_str.length; j > 0; j--) {
-                    save_string = $.terminal.escape_regex(rev_search_str.substring(0, j));
+                    save_string = $.terminal.escape_regex(rev_search_str.slice(0, j));
                     if (settings.caseSensitiveSearch) {
                         regex = new RegExp(save_string);
                     } else {
@@ -1666,7 +2506,7 @@
                             self.set(history_data[i], true);
                             redraw();
                             if (rev_search_str.length !== j) {
-                                rev_search_str = rev_search_str.substring(0, j);
+                                rev_search_str = rev_search_str.slice(0, j);
                                 draw_reverse_prompt();
                             }
                             return;
@@ -1677,19 +2517,28 @@
             rev_search_str = ''; // clear if not found any
         }
         // ---------------------------------------------------------------------
-        // :: Recalculate number of characters in command line
+        // :: calculate width of hte character
         // ---------------------------------------------------------------------
-        function change_num_chars() {
-            var $prompt = self.find('.prompt').html('<span>&nbsp;</span>');
-            var W = self.width();
-            var w = $prompt.find('span')[0].getBoundingClientRect().width;
-            num_chars = Math.floor(W / w);
+        function get_char_width() {
+            var $prompt = self.find('.cmd-prompt');
+            var html = $prompt.html();
+            $prompt.html('<span>&nbsp;</span>');
+            var width = $prompt.find('span')[0].getBoundingClientRect().width;
+            $prompt.html(html);
+            return width;
+        }
+        // ---------------------------------------------------------------------
+        // :: return number of characters in command line
+        // ---------------------------------------------------------------------
+        function get_num_chars(char_width) {
+            var width = self.width();
+            return Math.floor(width / char_width);
         }
         // ---------------------------------------------------------------------
         // :: Split String that fit into command line where first line need to
         // :: fit next to prompt (need to have less characters)
         // ---------------------------------------------------------------------
-        function get_splitted_command_line(string) {
+        function process_cmd_line(string) {
             function split(string) {
                 return $.terminal.split_equal(string, num_chars);
             }
@@ -1699,10 +2548,10 @@
                     return !$.terminal.strip(line).match(/^ $/);
                 });
             }
-            var line = prompt_node.find('.line');
+            var line = prompt_node.find('.cmd-line');
             var prompt;
             if (line.length) {
-                prompt = line.nextUntil('.line').text();
+                prompt = line.nextUntil('.cmd-line').text();
             } else {
                 prompt = prompt_node.text();
             }
@@ -1713,7 +2562,7 @@
                 var tmp = string.split('\n');
                 var first_len = num_chars - prompt_len - 1;
                 for (var i = 0; i < tmp.length - 1; ++i) {
-                    tmp[i] += ' ';
+                    tmp[i] += line_marker;
                 }
                 // split first line
                 if (strlen(tmp[0]) > first_len) {
@@ -1740,10 +2589,31 @@
                 array[0] = array[0].replace(re, '');
             }
             // fix issue with cursor that was cut off #379
-            if (array.length > 1 && array[array.length - 1].length === num_chars) {
-                array.push('');
+            if (array.length > 1) {
+                var len = $.terminal.length(array[array.length - 1]);
+                if (len === num_chars) {
+                    array.push('');
+                }
             }
             return array;
+        }
+        // ---------------------------------------------------------------------
+        var cmd_line_worker = new WorkerCache({
+            validation: function(key) {
+                var result = false;
+                if ((!this._previous_value || this._previous_value === key) &&
+                    (!this._cols || this._cols === num_chars)) {
+                    result = true;
+                }
+                this._previous_value = key;
+                this._cols = num_chars;
+                return result;
+            },
+            action: process_cmd_line
+        });
+        // ---------------------------------------------------------------------
+        function get_splitted_command_line(string) {
+            return cmd_line_worker.get(string);
         }
         // ---------------------------------------------------------------------
         // :: use custom formatting
@@ -1752,23 +2622,23 @@
             // we don't want to format command when user type formatting in
             try {
                 string = $.terminal.escape_formatting(string);
-                var options = $.extend({}, settings, {
+                var format_options = $.extend({}, settings, {
                     unixFormattingEscapeBrackets: true,
                     position: position
                 });
-                var formatted = $.terminal.apply_formatters(string, options);
-                string = formatted[0];
+                var formatted = $.terminal.apply_formatters(string, format_options);
+                var output = $.terminal.normalize(formatted[0]);
+                var max = $.terminal.length(output);
                 if (!skip_formatted_position) {
                     formatted_position = formatted[1];
+                    // fix issue with nested formatting where max length
+                    // is checked before nested_formatting flatten formatting
+                    if (formatted_position > max) {
+                        formatted_position = max;
+                    }
                 }
-                string = $.terminal.normalize(string);
-                var max = $.terminal.length(string);
-                // fix issue with nested formatting where max length is checked before
-                // nested_formatting flatten formatting
-                if (formatted_position > max) {
-                    formatted_position = max;
-                }
-                return string;
+                output = $.terminal.normalize(output);
+                return output;
             } catch (e) {
                 alert_exception('[Formatting]', e.stack);
                 return string;
@@ -1778,12 +2648,14 @@
         // :: format and encode the string
         // ---------------------------------------------------------------------
         function format(string, before) {
+            //string = $.terminal.normalize(string);
             var encoded = $.terminal.encode(wrap(string), {
                 tabs: settings.tabs,
                 before: before
             });
             string = $.terminal.format(encoded, {
-                char_width: settings.char_width
+                char_width: settings.char_width,
+                allowedAttributes: settings.allowedAttributes || []
             });
             var re = /(<span[^>]+data-text[^>]+>)(.*?)(<\/span>)/g;
             return string.replace(re, '$1<span>$2</span>$3');
@@ -1794,38 +2666,15 @@
         // :: this function is not very usefull so it's not in $.terminal
         // ---------------------------------------------------------------------
         function wrap(string) {
-            function formatting(string) {
-                if ($.terminal.is_formatting(string)) {
-                    if (string.match(/\]\\\]/)) {
-                        string = string.replace(/\]\\\]/g, ']\\\\]');
-                    }
-                } else {
-                    if (string.match(/\\$/)) {
-                        string += '\\';
-                    }
-                    string = '[[;;]' + string + ']';
-                }
-                return string;
-            }
-            var len = length(string);
-            if (len === 1) {
-                return formatting(string);
-            }
-            var result = [];
-            // len - 1 break the command line $.terminal.substring will return
-            // empty string for out of bound indexes
-            for (var i = 0; i < len; ++i) {
-                var text = $.terminal.substring(string, i, i + 1);
-                result.push(formatting(text));
-            }
-            return result.join('');
+            return $.terminal.partition(string).join('');
         }
         // ---------------------------------------------------------------------
         // :: shortcut helpers
         // ---------------------------------------------------------------------
-        function length(str) {
-            return $.terminal.length(str);
+        function length(str, raw) {
+            return $.terminal.length(str, raw);
         }
+        // ---------------------------------------------------------------------
         function substring(str, start, end) {
             return $.terminal.substring(str, start, end);
         }
@@ -1841,6 +2690,11 @@
             // :: Draw line with the cursor
             // -----------------------------------------------------------------
             function draw_cursor_line(string, options) {
+                var end_line = string.match(line_marker_re);
+                if (end_line) {
+                    string = string.replace(line_marker_re, ' ');
+                }
+                var cursor_end_line = false;
                 var settings = $.extend({
                     prompt: '',
                     last: false
@@ -1848,6 +2702,9 @@
                 var position = settings.position;
                 var len = length(string);
                 var prompt = settings.prompt;
+                if (ch_unit_bug) {
+                    cursor.width(char_width);
+                }
                 var c;
                 if (position === len) {
                     before.html(format(string));
@@ -1865,6 +2722,7 @@
                     var c_before = (prompt + before_str).replace(/^.*\t/, '');
                     cursor.html(format(c, c_before));
                     if (position === len - 1) {
+                        cursor_end_line = true;
                         after.html('');
                     } else {
                         if (c.match(/\t/)) {
@@ -1875,20 +2733,28 @@
                         after.html(format(substring(string, position + 1), c_before));
                     }
                 }
-                // fix for command line selection
-                var noselect = settings.position === (settings.last ? len : len - 1);
-                cursor.toggleClass('noselect', noselect);
+                cursor.toggleClass('cmd-end-line', cursor_end_line);
                 // fix for animation when changing --animation dynamically
                 fix_cursor();
+                var cursor_len = $.terminal.length(cursor.text());
+                if (cursor_len > 1) {
+                    var node = cursor.find('[data-text]')[0];
+                    node.style.setProperty('--length', cursor_len);
+                }
                 // synchronize css animations (it's not that important because if user
                 // will change animation she should disable animation on span, but it
                 // looks nicer until she disable that inner animation)
                 restart_animation();
             }
             function div(string, before) {
-                return '<div role="presentation" aria-hidden="true">' +
-                    format(string, before || '') +
-                    '</div>';
+                var end_line = string.match(line_marker_re);
+                var result = '<div role="presentation" aria-hidden="true"';
+                if (end_line) {
+                    string = string.replace(line_marker_re, ' ');
+                    result += ' class="cmd-end-line"';
+                }
+                result += '>' + format(string, before || '') + '</div>';
+                return result;
             }
             // -----------------------------------------------------------------
             // :: Display lines after the cursor
@@ -1920,21 +2786,29 @@
                         string = command.replace(/./g, settings.mask);
                         break;
                 }
-                string = formatting(string);
-                var pos = formatted_position;
+                var formatted = formatting(string);
+                var pos;
+                if (length(formatted) === text(string).length) {
+                    pos = position;
+                } else {
+                    pos = formatted_position;
+                }
                 var i;
-                self.find('div:not(.cursor-line,.clipboard-wrapper)').remove();
+                wrapper.css({
+                    display: 'none'
+                });
+                wrapper.find('div:not(.cmd-cursor-line)').remove();
                 before.html('');
                 // long line
-                if (strlen(text(string)) > num_chars - prompt_len - 1 ||
-                    string.match(/\n/)) {
-                    var tabs = string.match(/\t/g);
-                    var original_string = string;
+                if (strlen(text(formatted)) > num_chars - prompt_len - 1 ||
+                    formatted.match(/\n/)) {
+                    var tabs = formatted.match(/\t/g);
+                    var original_string = formatted;
                     //quick tabulation hack
                     if (tabs) {
-                        string = string.replace(/\t/g, '\x00\x00\x00\x00');
+                        formatted = formatted.replace(/\t/g, '\x00\x00\x00\x00');
                     }
-                    var array = get_splitted_command_line(string);
+                    var array = get_splitted_command_line(formatted);
                     if (tabs) {
                         array = $.map(array, function(line) {
                             return line.replace(/\x00\x00\x00\x00/g, '\t');
@@ -1946,6 +2820,7 @@
                         // skip empty line
                     } else if (pos < first_len) {
                         draw_cursor_line(array[0], {
+                            length: array.length,
                             position: pos,
                             prompt: prompt_last_line
                         });
@@ -1953,8 +2828,12 @@
                     } else if (pos === first_len) {
                         // first char acter of second line
                         cursor_line.before(div(array[0], prompt_last_line));
-                        draw_cursor_line(array[1] || '', {position: 0});
-                        if (array.length > 1) {
+                        draw_cursor_line(array[1] || '', {
+                            length: array.length,
+                            position: 0,
+                            last: array.length <= 2
+                        });
+                        if (array.length > 2) {
                             lines_after(array.slice(2));
                         }
                     } else {
@@ -1974,6 +2853,7 @@
                                 new_pos = last_len - from_last;
                             }
                             draw_cursor_line(last, {
+                                length: array.length,
                                 position: new_pos,
                                 last: true
                             });
@@ -2003,20 +2883,34 @@
                                 }
                             }
                             draw_cursor_line(current, {
+                                length: array.length,
                                 position: new_pos
                             });
                             lines_before(array.slice(0, line_index));
                             lines_after(array.slice(line_index + 1));
                         }
                     }
-                    self.find('.cursor-line ~ div:last-of-type').append('<span></span>');
-                } else if (string === '') {
+                    self.find('.cmd-cursor-line ~ div:last-of-type')
+                        .append('<span></span>');
+                } else if (formatted === '') {
                     before.html('');
                     cursor.html('<span><span>&nbsp;</span></span>');
                     after.html('');
                 } else {
-                    draw_cursor_line(string, {position: pos});
+                    draw_cursor_line(formatted, {
+                        length: 1,
+                        position: pos
+                    });
                 }
+                var in_line = cursor_line.prevUntil('.cmd-prompt').length;
+                if (is_css_variables_supported) {
+                    self[0].style.setProperty('--cursor-line', in_line);
+                } else {
+                    clip.$node.css('top', in_line * 14 + 'px');
+                }
+                wrapper.css({
+                    display: ''
+                });
             };
         })();
         // ---------------------------------------------------------------------
@@ -2024,13 +2918,20 @@
         // :: change length by formatters
         // ---------------------------------------------------------------------
         var find_position = (function() {
-            function cmp(search_pos, pos) {
+            function make_guess(string, position) {
                 var opts = $.extend({}, settings, {
-                    position: pos
+                    position: position
                 });
-                var guess = $.terminal.apply_formatters(command, opts)[1];
+                return $.terminal.apply_formatters(string, opts)[1];
+            }
+            function cmp(search_pos, pos, string) {
+                var guess = make_guess(string, pos);
                 if (guess === search_pos) {
-                    return 0;
+                    var next_guess = make_guess(string, pos + 1);
+                    if (next_guess > search_pos) {
+                        return 0;
+                    }
+                    return 1;
                 } else if (guess < search_pos) {
                     return 1;
                 } else {
@@ -2041,9 +2942,10 @@
                 if (formatted_position === 0) {
                     return 0;
                 }
-                string = text(string);
+                string = bare_text(string);
                 var codepoint_len = string.length;
-                var pos = binary_search(0, codepoint_len, formatted_position, cmp);
+                var str = $.terminal.escape_brackets(command);
+                var pos = binary_search(0, codepoint_len, formatted_position, cmp, [str]);
                 var chars = $.terminal.split_characters(string);
                 if (codepoint_len > chars.length) {
                     var len = 0;
@@ -2060,13 +2962,19 @@
         // ---------------------------------------------------------------------
         // :: Draw prompt that can be a function or a string
         // ---------------------------------------------------------------------
+        var prev_prompt_data;
         var draw_prompt = (function() {
             function set(prompt) {
                 prompt = $.terminal.apply_formatters(prompt, {});
                 prompt = $.terminal.normalize(prompt);
                 prompt = crlf(prompt);
                 last_rendered_prompt = prompt;
-                var lines = $.terminal.split_equal(prompt, num_chars);
+                var lines = $.terminal.split_equal(prompt, num_chars).map(function(line) {
+                    if (!$.terminal.have_formatting(line)) {
+                        return '[[;;]' + line + ']';
+                    }
+                    return line;
+                });
                 var options = {
                     char_width: settings.char_width
                 };
@@ -2079,7 +2987,7 @@
                     line = $.terminal.encode(line, {
                         tabs: settings.tabs
                     });
-                    return '<span class="line">' +
+                    return '<span class="cmd-line">' +
                         $.terminal.format(line, options) +
                         '</span>';
                 }).concat([last_line]).join('\n');
@@ -2090,36 +2998,45 @@
                 }
             }
             return function() {
+                // the data is used as cancelable reference because we have ref
+                // data object that is hold in closure and we remove `set` function
+                // so previous call to function prompt will be ignored
+                if (prev_prompt_data && prev_prompt_data.set) {
+                    prev_prompt_data.set = $.noop;
+                    // remove reference for garbage collector
+                    prev_prompt_data = null;
+                }
                 switch (typeof prompt) {
                     case 'string':
                         set(prompt);
                         break;
                     case 'function':
-                        prompt.call(self, set);
+                        var data = prev_prompt_data = {
+                            set: set
+                        };
+                        var ret = prompt.call(self, function(string) {
+                            data.set(string);
+                        });
+                        if (ret && ret.then) {
+                            ret.then(data.set).catch(function(e) {
+                                var prompt = $.terminal.escape_brackets('[ERR]> ');
+                                data.set('[[;red;]' + prompt + ']');
+                                alert_exception('Prompt', e);
+                            });
+                        }
                         break;
                 }
             };
         })();
         // ---------------------------------------------------------------------
-        // :: Paste content to terminal using hidden textarea
-        // ---------------------------------------------------------------------
-        function paste() {
-            if (paste_count++ > 0) {
-                return;
-            }
-            if (self.isenabled()) {
-                //wait until Browser insert text to textarea
-                self.oneTime(100, function() {
-                    self.insert(clip.val());
-                    clip.val(command);
-                    fix_textarea();
-                });
-            }
-        }
         function fire_change_command() {
             if (is_function(settings.onCommandChange)) {
                 settings.onCommandChange.call(self, command);
             }
+        }
+        // ---------------------------------------------------------------------
+        function clean(string) {
+            return string.replace(/((?!\\).)\\(?:&#93;|])/g, '$1&#93;');
         }
         // ---------------------------------------------------------------------
         // :: Command Line Methods
@@ -2159,7 +3076,7 @@
                 return history;
             },
             'delete': function(n, stay) {
-                var removed;
+                var removed, string;
                 if (n === 0) {
                     return "";
                 } else if (n < 0) {
@@ -2167,28 +3084,34 @@
                         // this may look weird but if n is negative we need
                         // to use +
                         removed = command.slice(0, position).slice(n);
-                        command = command.slice(0, position + n) +
-                            command.slice(position, command.length);
+                        string = bare_text(command);
+                        string = string.slice(0, position + n) +
+                            string.slice(position, string.length);
                         if (!stay) {
                             self.position(position + n);
                         }
-                        fire_change_command();
                     }
-                } else if (command !== '' && position < command.length) {
-                    removed = command.slice(position).slice(0, n);
-                    command = command.slice(0, position) +
-                        command.slice(position + n, command.length);
-                    fire_change_command();
+                } else if (command !== '') {
+                    string = text(command);
+                    if (position < string.length) {
+                        removed = string.slice(position).slice(0, n);
+                        string = string.slice(0, position) +
+                            string.slice(position + n, string.length);
+                    }
+                }
+                if (removed) {
+                    command = clean(string);
                 }
                 redraw();
                 fix_textarea();
+                fire_change_command();
                 return removed;
             },
             set: function(string, stay, silent) {
                 if (string !== undefined) {
-                    command = string;
+                    command = clean(string);
                     if (!stay) {
-                        self.position(command.length);
+                        self.position(bare_text(command).length);
                     }
                     redraw();
                     fix_textarea();
@@ -2231,22 +3154,23 @@
                 }
             },
             insert: function(string, stay) {
-                if (position === command.length) {
-                    command += string;
+                var bare_command = bare_text(command);
+                var len = bare_text(string).length;
+                if (position === bare_command.length) {
+                    string = bare_command + string;
                 } else if (position === 0) {
-                    command = string + command;
+                    string = string + bare_command;
                 } else {
-                    command = command.slice(0, position) +
-                        string + command.slice(position);
+                    string = bare_command.slice(0, position) +
+                        string + bare_command.slice(position);
                 }
+                command = clean(string);
                 if (!stay) {
-                    self.position(string.length, true, true);
-                } else {
-                    fix_textarea();
+                    self.position(len, true, true);
                 }
+                fix_textarea();
                 redraw();
                 fire_change_command();
-                fix_textarea();
                 return self;
             },
             get: function() {
@@ -2265,11 +3189,23 @@
                 doc.unbind('keydown.cmd', keydown_event);
                 doc.unbind('input.cmd', input_event);
                 self.stopTime('blink', blink);
-                self.find('.cursor').next().remove().end().prev().remove().
-                    end().remove();
-                self.find('.prompt, .clipboard').remove();
+                self.find('.cmd-wrapper').remove();
+                self.find('.cmd-prompt, .cmd-clipboard, .cmd-editable').remove();
                 self.removeClass('cmd').removeData('cmd').off('.cmd');
                 return self;
+            },
+            column: function(include_prompt) {
+                var before = command.substring(0, position);
+                if (position === 0 || !command.length) {
+                    return 0;
+                }
+                var re = /\n?([^\n]*)$/;
+                var match = before.match(re);
+                var col = match[1].length % num_chars;
+                if (!have_newlines(before) && (include_prompt || have_wrapping(before))) {
+                    col += prompt_len;
+                }
+                return col;
             },
             prompt: function(user_prompt) {
                 if (user_prompt === true) {
@@ -2277,16 +3213,19 @@
                 } else if (user_prompt === undefined) {
                     return prompt;
                 } else {
+                    var should_redraw = user_prompt !== prompt;
                     if (typeof user_prompt === 'string' ||
                         typeof user_prompt === 'function') {
                         prompt = user_prompt;
                     } else {
                         throw new Error('prompt must be a function or string');
                     }
-                    draw_prompt();
-                    // we could check if command is longer then numchars-new
-                    // prompt
-                    redraw();
+                    if (should_redraw) {
+                        draw_prompt();
+                        // we could check if command is longer then numchars-new
+                        // prompt
+                        redraw();
+                    }
                     return self;
                 }
             },
@@ -2296,12 +3235,13 @@
             position: function(n, relative, silent) {
                 if (typeof n === 'number') {
                     var pos = position;
+                    var len = bare_text(command).length;
                     if (relative) {
                         position += n;
                     } else if (n < 0) {
                         position = 0;
-                    } else if (n > command.length) {
-                        position = command.length;
+                    } else if (n > len) {
+                        position = len;
                     } else {
                         position = n;
                     }
@@ -2320,6 +3260,7 @@
             refresh: function() {
                 draw_prompt();
                 redraw();
+                fix_textarea(true);
                 return self;
             },
             // if formatter change length of the strings (like emoji demo) we need to keep
@@ -2328,9 +3269,10 @@
                 if (n === undefined) {
                     return formatted_position;
                 } else {
-                    var string = formatting(command, true);
-                    var len = $.terminal.length(string);
-                    var command_len = text(command).length;
+                    // double escape
+                    var string = formatting($.terminal.escape_formatting(command), true);
+                    var len = length(string);
+                    var command_len = bare_text(command).length;
                     var new_formatted_pos;
                     if (relative) {
                         new_formatted_pos = formatted_position + n;
@@ -2338,6 +3280,10 @@
                         new_formatted_pos = len;
                     } else {
                         new_formatted_pos = n;
+                    }
+                    if (text(string).length === length(command, true)) {
+                        formatted_position = new_formatted_pos;
+                        return self.position(new_formatted_pos);
                     }
                     if (len === new_formatted_pos) {
                         formatted_position = new_formatted_pos;
@@ -2370,26 +3316,60 @@
                 };
             })(),
             resize: function(num) {
-                if (num) {
-                    num_chars = num;
+                char_width = get_char_width();
+                var new_num_chars;
+                if (typeof num === 'number') {
+                    new_num_chars = num;
                 } else {
-                    change_num_chars();
+                    new_num_chars = get_num_chars(char_width);
                 }
-                redraw();
-                draw_prompt();
+                if (num_chars !== new_num_chars || arguments[0] === true) {
+                    num_chars = new_num_chars;
+                    redraw();
+                    draw_prompt();
+                }
                 return self;
             },
-            enable: function(silient) {
+            invoke_key: function(shortcut) {
+                var keys = shortcut.toUpperCase().split('+');
+                var key = keys.pop();
+                var ctrl = keys.indexOf('CTRL') !== -1;
+                var shift = keys.indexOf('SHIFT') !== -1;
+                var alt = keys.indexOf('ALT') !== -1;
+                var meta = keys.indexOf('META') !== -1;
+                var e = $.Event("keydown", {
+                    ctrlKey: ctrl,
+                    shiftKey: shift,
+                    altKey: alt,
+                    metaKey: meta,
+                    which: reversed_keycodes[key],
+                    key: key
+                });
+                var doc = $(document.documentElement || window);
+                doc.trigger(e);
+                e = $.Event("keypress");
+                e.key = key;
+                e.which = e.keyCode = 0;
+                doc.trigger(e);
+                return self;
+            },
+            clip: function() {
+                return clip;
+            },
+            enable: function(silent) {
                 if (!enabled) {
                     enabled = true;
                     self.addClass('enabled');
                     try {
-                        clip.caret(position);
+                        if (!clip.$node.is(':focus')) {
+                            clip.$node.focus();
+                        }
+                        clip.$node.caret(position);
                     } catch (e) {
-                        // firefox throw NS_ERROR_FAILURE ignore
+                        // firefox throw NS_ERROR_FAILURE - ignore
                     }
                     animation(true);
-                    if (!silient) {
+                    if (!silent && is_function(prompt)) {
                         draw_prompt();
                     }
                     fix_cursor();
@@ -2420,27 +3400,26 @@
                 }
             }
         });
-        //debug_object(self, 'cmd')('display_position');
         // ---------------------------------------------------------------------
         // :: INIT
         // ---------------------------------------------------------------------
         self.name(settings.name || settings.prompt || '');
-        if (typeof settings.prompt === 'string') {
+        if (settings.prompt !== false) {
             prompt = settings.prompt;
-        } else {
-            prompt = '> ';
+            draw_prompt();
         }
-        draw_prompt();
         if (settings.enabled === true) {
             self.enable();
         }
+        char_width = get_char_width();
+        num_chars = get_num_chars(char_width);
         if (!settings.history) {
             history.disable();
         }
         var first_up_history = true;
-        // prevent_keypress - hack for Android that was inserting characters on
+        // skip_keypress - hack for Android that was inserting characters on
         // backspace
-        var prevent_keypress = false;
+        var skip_keypress = false;
         var dead_key = false;
         var single_key = false;
         var no_keypress = false;
@@ -2454,6 +3433,7 @@
         // we hold text before keydown to fix backspace for Android/Chrome/SwiftKey
         // keyboard that generate keycode 229 for all keys #296
         var prev_command = '';
+        var prev_key;
         // ---------------------------------------------------------------------
         // :: Keydown Event Handler
         // ---------------------------------------------------------------------
@@ -2465,6 +3445,12 @@
             return e.key && e.key.length === 1 && !e.ctrlKey;
         }
         // ---------------------------------------------------------------------
+        function is_delay_key(key) {
+            var specials = ['HOLD+SHIFT+BACKSPACE', 'HOLD+BACKSPACE'];
+            return specials.indexOf(key) !== -1 && settings.mobileDelete ||
+                settings.repeatTimeoutKeys.indexOf(key) !== -1;
+        }
+        // ---------------------------------------------------------------------
         function clear_reverse_search_key(e) {
             // arrows / Home / End / ENTER
             return e.which === 35 || e.which === 36 ||
@@ -2472,11 +3458,14 @@
                 e.which === 39 || e.which === 40 ||
                 e.which === 13 || e.which === 27;
         }
+        var skip_keydown = false;
         // ---------------------------------------------------------------------
+        // function complexicity is 35 when adding this exception
+        // eslint-disable-next-line complexity
         function keydown_event(e) {
             debug('keydown "' + e.key + '" ' + e.fake + ' ' + e.which);
-            process = (e.key || '').toLowerCase() === 'process' || e.which === 0;
             var result;
+            process = (e.key || '').toLowerCase() === 'process' || e.which === 0;
             dead_key = no_keypress && single_key && !is_backspace(e);
             // special keys don't trigger keypress fix #293
             try {
@@ -2496,37 +3485,62 @@
                 return;
             }
             if (!e.fake) {
-                no_keypress = true;
                 no_keydown = false;
             }
+            no_keypress = true;
             // Meta+V did bind input but it didin't happen because terminal paste
             // prevent native insert action
-            clip.off('input', paste);
+            clip.$node.off('input', paste);
             var key = get_key(e);
             if (is_function(settings.keydown)) {
+                e.key = ie_key_fix(e);
                 result = settings.keydown.call(self, e);
                 if (result !== undefined) {
-                    //prevent_keypress = true;
+                    //skip_keypress = true;
                     if (!result) {
                         skip_insert = true;
                     }
                     return result;
                 }
             }
-            if (enabled) {
-                self.oneTime(settings.holdTimeout, 'hold', function() {
-                    hold = true;
-                });
+            if (key !== prev_key) {
+                clear_hold();
+            }
+            // CTRL+C hanlding is only exception of cmd aware terminal logic
+            // cmd need to call CTRL+C keymap when terminal is not enabled
+            if (enabled || (key === 'CTRL+C' && is_terminal_selected(self))) {
                 if (hold) {
+                    prev_key = key;
                     key = 'HOLD+' + key;
                     if (hold_pause) {
                         return;
                     }
-                    if (settings.holdRepeatTimeout > 0) {
+                    if (settings.holdRepeatTimeout > 0 && is_delay_key(key)) {
                         hold_pause = true;
                         self.oneTime(settings.holdRepeatTimeout, 'delay', function() {
                             hold_pause = false;
                         });
+                    }
+                } else {
+                    self.oneTime(settings.holdTimeout, 'hold', function() {
+                        hold = true;
+                    });
+                    prev_key = key;
+                }
+                // if e.fake ignore of space is handled in input and next keydown
+                // is not triggered this is just in case code since on Android
+                // keydown is not triggered only input so event is always fake on Android
+                if (!e.fake && is_android) {
+                    if (skip_keydown) {
+                        clear_hold();
+                        skip_keydown = false;
+                        return false;
+                    }
+                    if (mobile_ignore_key(key)) {
+                        skip_keydown = true;
+                    } else if (mobile_ignore_key(prev_key)) {
+                        // just in case next key is different then space
+                        skip_keydown = false;
                     }
                 }
                 restart_animation();
@@ -2556,16 +3570,17 @@
                 } else if (e.altKey) {
                     return;
                 } else {
-                    prevent_keypress = false;
+                    skip_keypress = false;
                     return;
                 }
                 // this will prevent for instance backspace to go back one page
-                //prevent_keypress = true;
+                //skip_keypress = true;
                 //e.preventDefault();
             }
         }
         function clear_hold() {
             self.stopTime('hold');
+            self.stopTime('delay');
             hold_pause = hold = false;
         }
         var doc = $(document.documentElement || window);
@@ -2580,7 +3595,7 @@
             if ((e.ctrlKey || e.metaKey) && !e.altKey) {
                 return;
             }
-            if (prevent_keypress) {
+            if (skip_keypress) {
                 return;
             }
             if (is_function(settings.keypress)) {
@@ -2601,7 +3616,7 @@
                 // key polyfill is not correct for keypress
                 // https://github.com/cvan/keyboardevent-key-polyfill/issues/15
                 var key;
-                if (is_key_native || e.fake) {
+                if (is_key_native) {
                     key = e.key;
                     // fixing IE inconsistency #362
                     var normalized = key.toUpperCase();
@@ -2639,12 +3654,16 @@
             event.fake = true;
             doc.trigger(event);
         }
+        var skip_input = false;
         function input_event() {
             debug('input ' + no_keydown + ' || ' + process + ' ((' + no_keypress +
                   ' || ' + dead_key + ') && !' + skip_insert + ' && (' + single_key +
                   ' || ' + no_key + ') && !' + backspace + ')');
             // correct for fake space used for select all context menu hack
-            var val = clip.val().replace(/^ /, '');
+            var val = clip.val();
+            if (!is_mobile) {
+                val = val.replace(/^ /, '');
+            }
             // Some Androids don't fire keypress - #39
             // if there is dead_key we also need to grab real character #158
             // Firefox/Android with google keyboard don't fire keydown and keyup #319
@@ -2655,27 +3674,37 @@
                 // backspace is set in keydown if no keydown we need to get new one
                 if (no_keydown) {
                     var cmd = prev_command;
-                    backspace = cmd.substring(0, cmd.length - 1).length === val.length;
+                    backspace = cmd.slice(0, cmd.length - 1).length === val.length;
+                }
+                if (skip_input) {
+                    skip_input = false;
+                    clip.val(command);
+                    return;
                 }
                 if (reverse_search) {
                     rev_search_str = val;
                     reverse_history_search();
                     draw_reverse_prompt();
                 } else {
-                    var chr = val.substring(position);
-                    if (chr.length === 1 || backspace) {
+                    var str = val.slice(position);
+                    if (str.length === 1 || backspace) {
+                        // original not optimized function called once
+                        var chr = get_next_character(str);
+                        if (mobile_ignore_key(chr)) {
+                            skip_input = true;
+                        }
                         // we trigger events so keypress and keydown callback work
                         if (no_keydown) {
                             var keycode;
                             if (backspace) {
                                 keycode = 8;
                             } else {
-                                keycode = chr.toUpperCase().charCodeAt(0);
+                                keycode = str.toUpperCase().charCodeAt(0);
                             }
-                            event('keydown', backspace ? 'Backspace' : chr, keycode);
+                            event('keydown', backspace ? 'Backspace' : str, keycode);
                         }
                         if (no_keypress && !backspace) {
-                            event('keypress', chr, chr.charCodeAt(0));
+                            event('keypress', chr, str.charCodeAt(0));
                         }
                     }
                     if (backspace) {
@@ -2701,9 +3730,22 @@
             skip_insert = false;
             no_keydown = true;
         }
-        doc.bind('keypress.cmd', keypress_event).bind('keydown.cmd', keydown_event)
-            .bind('keyup.cmd', clear_hold).bind('input.cmd', input_event);
+        doc.bind('keypress.cmd', keypress_event);
+        doc.bind('keydown.cmd', keydown_event);
+        doc.bind('keyup.cmd', clear_hold);
+        doc.bind('input.cmd', input_event);
         (function() {
+            if (is_mobile) {
+                $(self[0]).add(clip.$node).on('touchstart.cmd', function() {
+                    if (!self.isenabled()) {
+                        clip.focus();
+                    } else {
+                        clip.blur();
+                    }
+                });
+                self.disable();
+                return;
+            }
             var was_down = false;
             var count = 0;
             self.on('mousedown.cmd', function() {
@@ -2711,10 +3753,11 @@
             }).on('mouseup.cmd', function(e) {
                 function trigger() {
                     var $target = $(e.target);
-                    if (!$target.is('.prompt') && down) {
+                    var is_prompt = $target.is('.cmd-prompt');
+                    if (!is_prompt && down && get_selected_html() === '') {
                         if (enabled) {
                             if ($target.is('.cmd')) {
-                                self.position(command.length);
+                                self.position(text(command).length);
                             } else {
                                 self.display_position(get_char_pos(e));
                             }
@@ -2729,7 +3772,7 @@
                 } else {
                     button = e.originalEvent.button;
                 }
-                if (button === 0 && get_selected_text() === '') {
+                if (button === 0 && get_selected_html() === '') {
                     var name = 'click_' + id;
                     if (++count === 1) {
                         var down = was_down;
@@ -2760,96 +3803,6 @@
         return self;
     }; // cmd plugin
     // -------------------------------------------------------------------------
-    /* eslint-disable */
-    // regex that match single character at begining and folowing combine character
-    // https://en.wikipedia.org/wiki/Combining_character
-    var combine_chr_re = /^(.(?:[\u0300-\u036F]|[\u1AB0-\u1abE]|[\u1DC0-\u1DF9]|[\u1DFB-\u1DFF]|[\u20D0-\u20F0]|[\uFE20-\uFE2F])+)/;
-    // source: https://mathiasbynens.be/notes/javascript-unicode
-    var astral_symbols_re = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
-    // source: https://github.com/mathiasbynens/emoji-regex
-    var emoji_re = /^(\uD83C\uDFF4(?:\uDB40\uDC67\uDB40\uDC62(?:\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67|\uDB40\uDC77\uDB40\uDC6C\uDB40\uDC73|\uDB40\uDC73\uDB40\uDC63\uDB40\uDC74)\uDB40\uDC7F|\u200D\u2620\uFE0F)|\uD83D\uDC69\u200D\uD83D\uDC69\u200D(?:\uD83D\uDC66\u200D\uD83D\uDC66|\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67]))|\uD83D\uDC68(?:\u200D(?:\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D)?\uD83D\uDC68|(?:\uD83D[\uDC68\uDC69])\u200D(?:\uD83D\uDC66\u200D\uD83D\uDC66|\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67]))|\uD83D\uDC66\u200D\uD83D\uDC66|\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67])|\uD83C[\uDF3E\uDF73\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDB0-\uDDB3])|(?:\uD83C[\uDFFB-\uDFFF])\u200D(?:\uD83C[\uDF3E\uDF73\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDB0-\uDDB3]))|\uD83D\uDC69\u200D(?:\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D(?:\uD83D[\uDC68\uDC69])|\uD83D[\uDC68\uDC69])|\uD83C[\uDF3E\uDF73\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDB0-\uDDB3])|\uD83D\uDC69\u200D\uD83D\uDC66\u200D\uD83D\uDC66|(?:\uD83D\uDC41\uFE0F\u200D\uD83D\uDDE8|\uD83D\uDC69(?:\uD83C[\uDFFB-\uDFFF])\u200D[\u2695\u2696\u2708]|\uD83D\uDC68(?:(?:\uD83C[\uDFFB-\uDFFF])\u200D[\u2695\u2696\u2708]|\u200D[\u2695\u2696\u2708])|(?:(?:\u26F9|\uD83C[\uDFCB\uDFCC]|\uD83D\uDD75)\uFE0F|\uD83D\uDC6F|\uD83E[\uDD3C\uDDDE\uDDDF])\u200D[\u2640\u2642]|(?:\u26F9|\uD83C[\uDFCB\uDFCC]|\uD83D\uDD75)(?:\uD83C[\uDFFB-\uDFFF])\u200D[\u2640\u2642]|(?:\uD83C[\uDFC3\uDFC4\uDFCA]|\uD83D[\uDC6E\uDC71\uDC73\uDC77\uDC81\uDC82\uDC86\uDC87\uDE45-\uDE47\uDE4B\uDE4D\uDE4E\uDEA3\uDEB4-\uDEB6]|\uD83E[\uDD26\uDD37-\uDD39\uDD3D\uDD3E\uDDB8\uDDB9\uDDD6-\uDDDD])(?:(?:\uD83C[\uDFFB-\uDFFF])\u200D[\u2640\u2642]|\u200D[\u2640\u2642])|\uD83D\uDC69\u200D[\u2695\u2696\u2708])\uFE0F|\uD83D\uDC69\u200D\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67])|\uD83D\uDC69\u200D\uD83D\uDC69\u200D(?:\uD83D[\uDC66\uDC67])|\uD83D\uDC68(?:\u200D(?:(?:\uD83D[\uDC68\uDC69])\u200D(?:\uD83D[\uDC66\uDC67])|\uD83D[\uDC66\uDC67])|\uD83C[\uDFFB-\uDFFF])|\uD83C\uDFF3\uFE0F\u200D\uD83C\uDF08|\uD83D\uDC69\u200D\uD83D\uDC67|\uD83D\uDC69(?:\uD83C[\uDFFB-\uDFFF])\u200D(?:\uD83C[\uDF3E\uDF73\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDB0-\uDDB3])|\uD83D\uDC69\u200D\uD83D\uDC66|\uD83C\uDDF6\uD83C\uDDE6|\uD83C\uDDFD\uD83C\uDDF0|\uD83C\uDDF4\uD83C\uDDF2|\uD83D\uDC69(?:\uD83C[\uDFFB-\uDFFF])|\uD83C\uDDED(?:\uD83C[\uDDF0\uDDF2\uDDF3\uDDF7\uDDF9\uDDFA])|\uD83C\uDDEC(?:\uD83C[\uDDE6\uDDE7\uDDE9-\uDDEE\uDDF1-\uDDF3\uDDF5-\uDDFA\uDDFC\uDDFE])|\uD83C\uDDEA(?:\uD83C[\uDDE6\uDDE8\uDDEA\uDDEC\uDDED\uDDF7-\uDDFA])|\uD83C\uDDE8(?:\uD83C[\uDDE6\uDDE8\uDDE9\uDDEB-\uDDEE\uDDF0-\uDDF5\uDDF7\uDDFA-\uDDFF])|\uD83C\uDDF2(?:\uD83C[\uDDE6\uDDE8-\uDDED\uDDF0-\uDDFF])|\uD83C\uDDF3(?:\uD83C[\uDDE6\uDDE8\uDDEA-\uDDEC\uDDEE\uDDF1\uDDF4\uDDF5\uDDF7\uDDFA\uDDFF])|\uD83C\uDDFC(?:\uD83C[\uDDEB\uDDF8])|\uD83C\uDDFA(?:\uD83C[\uDDE6\uDDEC\uDDF2\uDDF3\uDDF8\uDDFE\uDDFF])|\uD83C\uDDF0(?:\uD83C[\uDDEA\uDDEC-\uDDEE\uDDF2\uDDF3\uDDF5\uDDF7\uDDFC\uDDFE\uDDFF])|\uD83C\uDDEF(?:\uD83C[\uDDEA\uDDF2\uDDF4\uDDF5])|\uD83C\uDDF8(?:\uD83C[\uDDE6-\uDDEA\uDDEC-\uDDF4\uDDF7-\uDDF9\uDDFB\uDDFD-\uDDFF])|\uD83C\uDDEE(?:\uD83C[\uDDE8-\uDDEA\uDDF1-\uDDF4\uDDF6-\uDDF9])|\uD83C\uDDFF(?:\uD83C[\uDDE6\uDDF2\uDDFC])|\uD83C\uDDEB(?:\uD83C[\uDDEE-\uDDF0\uDDF2\uDDF4\uDDF7])|\uD83C\uDDF5(?:\uD83C[\uDDE6\uDDEA-\uDDED\uDDF0-\uDDF3\uDDF7-\uDDF9\uDDFC\uDDFE])|\uD83C\uDDE9(?:\uD83C[\uDDEA\uDDEC\uDDEF\uDDF0\uDDF2\uDDF4\uDDFF])|\uD83C\uDDF9(?:\uD83C[\uDDE6\uDDE8\uDDE9\uDDEB-\uDDED\uDDEF-\uDDF4\uDDF7\uDDF9\uDDFB\uDDFC\uDDFF])|\uD83C\uDDE7(?:\uD83C[\uDDE6\uDDE7\uDDE9-\uDDEF\uDDF1-\uDDF4\uDDF6-\uDDF9\uDDFB\uDDFC\uDDFE\uDDFF])|[#\*0-9]\uFE0F\u20E3|\uD83C\uDDF1(?:\uD83C[\uDDE6-\uDDE8\uDDEE\uDDF0\uDDF7-\uDDFB\uDDFE])|\uD83C\uDDE6(?:\uD83C[\uDDE8-\uDDEC\uDDEE\uDDF1\uDDF2\uDDF4\uDDF6-\uDDFA\uDDFC\uDDFD\uDDFF])|\uD83C\uDDF7(?:\uD83C[\uDDEA\uDDF4\uDDF8\uDDFA\uDDFC])|\uD83C\uDDFB(?:\uD83C[\uDDE6\uDDE8\uDDEA\uDDEC\uDDEE\uDDF3\uDDFA])|\uD83C\uDDFE(?:\uD83C[\uDDEA\uDDF9])|(?:\uD83C[\uDFC3\uDFC4\uDFCA]|\uD83D[\uDC6E\uDC71\uDC73\uDC77\uDC81\uDC82\uDC86\uDC87\uDE45-\uDE47\uDE4B\uDE4D\uDE4E\uDEA3\uDEB4-\uDEB6]|\uD83E[\uDD26\uDD37-\uDD39\uDD3D\uDD3E\uDDB8\uDDB9\uDDD6-\uDDDD])(?:\uD83C[\uDFFB-\uDFFF])|(?:\u26F9|\uD83C[\uDFCB\uDFCC]|\uD83D\uDD75)(?:\uD83C[\uDFFB-\uDFFF])|(?:[\u261D\u270A-\u270D]|\uD83C[\uDF85\uDFC2\uDFC7]|\uD83D[\uDC42\uDC43\uDC46-\uDC50\uDC66\uDC67\uDC70\uDC72\uDC74-\uDC76\uDC78\uDC7C\uDC83\uDC85\uDCAA\uDD74\uDD7A\uDD90\uDD95\uDD96\uDE4C\uDE4F\uDEC0\uDECC]|\uD83E[\uDD18-\uDD1C\uDD1E\uDD1F\uDD30-\uDD36\uDDB5\uDDB6\uDDD1-\uDDD5])(?:\uD83C[\uDFFB-\uDFFF])|(?:[\u231A\u231B\u23E9-\u23EC\u23F0\u23F3\u25FD\u25FE\u2614\u2615\u2648-\u2653\u267F\u2693\u26A1\u26AA\u26AB\u26BD\u26BE\u26C4\u26C5\u26CE\u26D4\u26EA\u26F2\u26F3\u26F5\u26FA\u26FD\u2705\u270A\u270B\u2728\u274C\u274E\u2753-\u2755\u2757\u2795-\u2797\u27B0\u27BF\u2B1B\u2B1C\u2B50\u2B55]|\uD83C[\uDC04\uDCCF\uDD8E\uDD91-\uDD9A\uDDE6-\uDDFF\uDE01\uDE1A\uDE2F\uDE32-\uDE36\uDE38-\uDE3A\uDE50\uDE51\uDF00-\uDF20\uDF2D-\uDF35\uDF37-\uDF7C\uDF7E-\uDF93\uDFA0-\uDFCA\uDFCF-\uDFD3\uDFE0-\uDFF0\uDFF4\uDFF8-\uDFFF]|\uD83D[\uDC00-\uDC3E\uDC40\uDC42-\uDCFC\uDCFF-\uDD3D\uDD4B-\uDD4E\uDD50-\uDD67\uDD7A\uDD95\uDD96\uDDA4\uDDFB-\uDE4F\uDE80-\uDEC5\uDECC\uDED0-\uDED2\uDEEB\uDEEC\uDEF4-\uDEF9]|\uD83E[\uDD10-\uDD3A\uDD3C-\uDD3E\uDD40-\uDD45\uDD47-\uDD70\uDD73-\uDD76\uDD7A\uDD7C-\uDDA2\uDDB0-\uDDB9\uDDC0-\uDDC2\uDDD0-\uDDFF])|(?:[#\*0-9\xA9\xAE\u203C\u2049\u2122\u2139\u2194-\u2199\u21A9\u21AA\u231A\u231B\u2328\u23CF\u23E9-\u23F3\u23F8-\u23FA\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB-\u25FE\u2600-\u2604\u260E\u2611\u2614\u2615\u2618\u261D\u2620\u2622\u2623\u2626\u262A\u262E\u262F\u2638-\u263A\u2640\u2642\u2648-\u2653\u265F\u2660\u2663\u2665\u2666\u2668\u267B\u267E\u267F\u2692-\u2697\u2699\u269B\u269C\u26A0\u26A1\u26AA\u26AB\u26B0\u26B1\u26BD\u26BE\u26C4\u26C5\u26C8\u26CE\u26CF\u26D1\u26D3\u26D4\u26E9\u26EA\u26F0-\u26F5\u26F7-\u26FA\u26FD\u2702\u2705\u2708-\u270D\u270F\u2712\u2714\u2716\u271D\u2721\u2728\u2733\u2734\u2744\u2747\u274C\u274E\u2753-\u2755\u2757\u2763\u2764\u2795-\u2797\u27A1\u27B0\u27BF\u2934\u2935\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u3030\u303D\u3297\u3299]|\uD83C[\uDC04\uDCCF\uDD70\uDD71\uDD7E\uDD7F\uDD8E\uDD91-\uDD9A\uDDE6-\uDDFF\uDE01\uDE02\uDE1A\uDE2F\uDE32-\uDE3A\uDE50\uDE51\uDF00-\uDF21\uDF24-\uDF93\uDF96\uDF97\uDF99-\uDF9B\uDF9E-\uDFF0\uDFF3-\uDFF5\uDFF7-\uDFFF]|\uD83D[\uDC00-\uDCFD\uDCFF-\uDD3D\uDD49-\uDD4E\uDD50-\uDD67\uDD6F\uDD70\uDD73-\uDD7A\uDD87\uDD8A-\uDD8D\uDD90\uDD95\uDD96\uDDA4\uDDA5\uDDA8\uDDB1\uDDB2\uDDBC\uDDC2-\uDDC4\uDDD1-\uDDD3\uDDDC-\uDDDE\uDDE1\uDDE3\uDDE8\uDDEF\uDDF3\uDDFA-\uDE4F\uDE80-\uDEC5\uDECB-\uDED2\uDEE0-\uDEE5\uDEE9\uDEEB\uDEEC\uDEF0\uDEF3-\uDEF9]|\uD83E[\uDD10-\uDD3A\uDD3C-\uDD3E\uDD40-\uDD45\uDD47-\uDD70\uDD73-\uDD76\uDD7A\uDD7C-\uDDA2\uDDB0-\uDDB9\uDDC0-\uDDC2\uDDD0-\uDDFF])\uFE0F|(?:[\u261D\u26F9\u270A-\u270D]|\uD83C[\uDF85\uDFC2-\uDFC4\uDFC7\uDFCA-\uDFCC]|\uD83D[\uDC42\uDC43\uDC46-\uDC50\uDC66-\uDC69\uDC6E\uDC70-\uDC78\uDC7C\uDC81-\uDC83\uDC85-\uDC87\uDCAA\uDD74\uDD75\uDD7A\uDD90\uDD95\uDD96\uDE45-\uDE47\uDE4B-\uDE4F\uDEA3\uDEB4-\uDEB6\uDEC0\uDECC]|\uD83E[\uDD18-\uDD1C\uDD1E\uDD1F\uDD26\uDD30-\uDD39\uDD3D\uDD3E\uDDB5\uDDB6\uDDB8\uDDB9\uDDD1-\uDDDD]))/;
-    // https://stackoverflow.com/questions/11381673/detecting-a-mobile-browser
-    var mobile_re = /(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i;
-    var tablet_re = /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i;
-    var format_split_re = /(\[\[[!gbiuso]*;[^;]*;[^\]]*\](?:[^\]]*[^\\](\\\\)*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]*)\]?)/i;
-    var format_parts_re = /\[\[([!gbiuso]*);([^;]*);([^;\]]*);?([^;\]]*);?([^\]]*)\]([^\]]*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]*)\]?/gi;
-    var format_re = /\[\[([!gbiuso]*;[^;\]]*;[^;\]]*(?:;|[^\]()]*);?[^\]]*)\]([^\]]*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]*)\]?/gi;
-    var format_exist_re = /\[\[([!gbiuso]*;[^;\]]*;[^;\]]*(?:;|[^\]()]*);?[^\]]*)\]([^\]]*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]*)\]/gi;
-    var format_full_re = /^\[\[([!gbiuso]*;[^;\]]*;[^;\]]*(?:;|[^\]()]*);?[^\]]*)\]([^\]]*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]*)\]$/gi;
-    var color_hex_re = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
-    var url_re = /(\bhttps?:\/\/(?:(?:(?!&[^;]+;)|(?=&amp;))[^\s"'<>\][)])+)/gi;
-    var url_nf_re = /\b(?![^\s[\]]*])(https?:\/\/(?:(?:(?!&[^;]+;)|(?=&amp;))[^\s"'<>\][)])+)/gi;
-    var email_re = /((([^<>('")[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,})))/g;
-    var command_re = /((?:"[^"\\]*(?:\\[\S\s][^"\\]*)*"|'[^'\\]*(?:\\[\S\s][^'\\]*)*'|\/[^\/\\]*(?:\\[\S\s][^\/\\]*)*\/[gimsuy]*(?=\s|$)|(?:\\\s|\S))+)(?=\s|$)/gi;
-    var extended_command_re = /^\s*((terminal|cmd)::([a-z_]+)\(([\s\S]*)\))\s*$/;
-    var format_begin_re = /(\[\[[!gbiuso]*;[^;]*;[^\]]*\])/i;
-    var format_start_re = /^(\[\[[!gbiuso]*;[^;]*;[^\]]*\])/i;
-    var format_end_re = /\[\[[!gbiuso]*;[^;]*;[^\]]*\]?$/i;
-    var format_exec_re = /(\[\[(?:[^\][]|\\\])+\]\])/;
-    var float_re = /^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$/;
-    var re_re = /^\/((?:\\\/|[^/]|\[[^\]]*\/[^\]]*\])+)\/([gimsuy]*)$/;
-    var string_re = /("(?:[^"\\]|\\(?:\\\\)*"|\\\\)*"|'(?:[^'\\]|\\(?:\\\\)*'|\\\\)*')/;
-    var unclosed_strings_re = /^(?=((?:[^"']+|"[^"\\]*(?:\\[^][^"\\]*)*"|'[^'\\]*(?:\\[^][^'\\]*)*')*))\1./;
-    /* eslint-enable */
-    // -------------------------------------------------------------------------
-    // :: TOOLS
-    // -------------------------------------------------------------------------
-    // taken from https://hacks.mozilla.org/2011/09/detecting-and-generating-
-    // css-animations-in-javascript/
-    var animation_supported = (function() {
-        var animation = false,
-            domPrefixes = 'Webkit Moz O ms Khtml'.split(' '),
-            elm = document.createElement('div');
-        if (elm.style.animationName) {
-            animation = true;
-        }
-        if (animation === false) {
-            for (var i = 0; i < domPrefixes.length; i++) {
-                var name = domPrefixes[i] + 'AnimationName';
-                if (elm.style[name] !== undefined) {
-                    animation = true;
-                    break;
-                }
-            }
-        }
-        elm = null;
-        return animation;
-    })();
-    // -------------------------------------------------------------------------
-    var is_ch_unit_supported = (function() {
-        var agent = window.navigator.userAgent;
-        if (agent.match(/MSIE|Trident/) && !agent.match(/IEMobile/)) {
-            return false;
-        }
-        var div = document.createElement('div');
-        div.style.width = '1ch';
-        return div.style.width === '1ch';
-    })();
-    // -------------------------------------------------------------------------
-    var is_css_variables_supported = window.CSS && window.CSS.supports &&
-            window.CSS.supports('--fake-var', 0);
-    // -------------------------------------------------------------------------
-    var is_android = navigator.userAgent.toLowerCase().indexOf('android') !== -1;
-    // -------------------------------------------------------------------------
-    var is_safari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    // -------------------------------------------------------------------------
-    var is_key_native = (function is_key_native() {
-        if (!('KeyboardEvent' in window && 'key' in window.KeyboardEvent.prototype)) {
-            return false;
-        }
-        var proto = window.KeyboardEvent.prototype;
-        var get = Object.getOwnPropertyDescriptor(proto, 'key').get;
-        return get.toString().match(/\[native code\]/);
-    })();
-    // -------------------------------------------------------------------------
-    var is_mobile = (function(a) {
-        var check = false;
-        if (mobile_re.test(a) || tablet_re.test(a.substr(0, 4))) {
-            check = true;
-        }
-        return check;
-    })(navigator.userAgent || navigator.vendor || window.opera);
-    // -------------------------------------------------------------------------
     var strlen = (function() {
         if (typeof wcwidth === 'undefined') {
             return function(string) {
@@ -2859,6 +3812,22 @@
             return wcwidth;
         }
     })();
+    // -------------------------------------------------------------------------
+    function count_selfclosing_formatting(string) {
+        var count = 0;
+        if ($.terminal.have_formatting(string)) {
+            var re = new RegExp(format_parts_re, 'i');
+            $.terminal.format_split(string).forEach(function(str) {
+                if ($.terminal.is_formatting(str)) {
+                    var m = str.match(re);
+                    if (m && m[1].match(/@/) && m[6] === '') {
+                        count++;
+                    }
+                }
+            });
+        }
+        return count;
+    }
     // -------------------------------------------------------------------------
     function bare_text(string) {
         if (!string.match(/&/)) {
@@ -2883,28 +3852,96 @@
         return string.replace(/\r/g, '');
     }
     // -------------------------------------------------------------------------
+    function char_len(chr) {
+        return entity_re.test(chr) ? 1 : chr.length;
+    }
+    // -------------------------------------------------------------------------
+    function make_re_fn(re) {
+        return function(string) {
+            var m = string.match(re);
+            if (starts_with(m)) {
+                return m[1];
+            }
+        };
+    }
+    // -------------------------------------------------------------------------
+    function starts_with(match) {
+        return match && match.index === 0;
+    }
+    // -------------------------------------------------------------------------
+    // :: optimized higher order function that it check complex regexes
+    // :: only when bigger string match those regexes, function is always
+    // :: used in loop when you process whole string, it's used to create local
+    // :: get_next_character function only cmd in input use original
+    // :: not optimized function
+    // -------------------------------------------------------------------------
+    function make_next_char_fun(string) {
+        var tests = [];
+        [
+            entity_re,
+            emoji_re,
+            combine_chr_re
+        ].forEach(function(re) {
+            if (string.match(re)) {
+                tests.push(make_re_fn(re));
+            }
+        });
+        if (string.match(astral_symbols_re)) {
+            tests.push(function(string) {
+                var m1 = string.match(astral_symbols_re);
+                if (starts_with(m1)) {
+                    var m2 = string.match(combine_chr_re);
+                    if (m2 && m2.index === 1) {
+                        return string.slice(0, 3);
+                    }
+                    return m1[1];
+                }
+            });
+        }
+        return function(string) {
+            for (var i = 0; i < tests.length; ++i) {
+                var test = tests[i];
+                var ret = test(string);
+                if (ret) {
+                    return ret;
+                }
+            }
+            return string[0];
+        };
+    }
+    // -------------------------------------------------------------------------
     // :: function that return character from beginning of the string
     // :: counting emoji, suroggate pairs and combine characters
     // -------------------------------------------------------------------------
     function get_next_character(string) {
+        var match_entity = string.match(entity_re);
+        if (starts_with(match_entity)) {
+            return match_entity[1];
+        }
+        var match_combo = string.match(combine_chr_re);
+        if (starts_with(match_combo)) {
+            return match_combo[1];
+        }
         var match_emoji = string.match(emoji_re);
-        if (match_emoji) {
+        if (starts_with(match_emoji)) {
             return match_emoji[1];
-        } else if (string.substring(0, 2).replace(astral_symbols_re, '_') === 1) {
-            if (string.substring(1).match(combine_chr_re)) {
-                return string.substring(0, 3);
-            }
-            return string.substring(0, 2);
-        } else {
-            var match_combo = string.match(combine_chr_re);
-            if (match_combo) {
-                return match_combo[1];
-            }
+        } else if (string.charCodeAt(0) < 255) {
             return string[0];
+        } else {
+            var astral_match = string.match(astral_symbols_re);
+            if (starts_with(astral_match)) {
+                match_combo = string.match(combine_chr_re);
+                if (match_combo && match_combo.index === 1) {
+                    return string.slice(0, 3);
+                }
+                return string.slice(0, 2);
+            } else {
+                return string[0];
+            }
         }
     }
     // -------------------------------------------------------------------------
-    // normalize position for counting emoji
+    // normalize position for counting emoji and extra chars
     // -------------------------------------------------------------------------
     function normalize_position(string, position) {
         if (position === 0) {
@@ -2915,7 +3952,7 @@
             if (typeof acc === 'number') {
                 return acc;
             }
-            var length = acc.length + chr.length;
+            var length = acc.length + char_len(chr);
             if (length >= position) {
                 return acc.position + 1;
             }
@@ -2944,6 +3981,7 @@
         return '';
     }
     // -------------------------------------------------------------------------
+    // options {char_width}
     function extra_css(text, options) {
         if (typeof wcwidth !== 'undefined') {
             var bare = bare_text(text);
@@ -2963,7 +4001,10 @@
                 return text;
             }
             var specs = chars.map(function(chr) {
-                return {len: strlen(chr), chr: chr};
+                return {
+                    len: strlen(chr),
+                    chr: chr
+                };
             }).reduce(function(arr, spec) {
                 var last = arr[arr.length - 1];
                 if (last) {
@@ -2971,44 +4012,57 @@
                         return arr.concat([{
                             sum: spec.len,
                             len: spec.len,
-                            str: spec.chr
+                            specs: [spec]
                         }]);
                     } else {
                         arr.pop();
                         return arr.concat([{
                             sum: last.sum + spec.len,
                             len: last.len,
-                            str: last.str + spec.chr
+                            specs: last.specs.concat(spec)
                         }]);
                     }
                 }
                 return [{
                     sum: spec.len,
-                    str: spec.chr,
+                    specs: [spec],
                     len: spec.len
                 }];
             }, []);
             return specs.map(function(spec) {
                 if (spec.len === 1) {
-                    return spec.str;
+                    return make_string(spec);
                 }
                 var style = char_width_prop(spec.sum, options);
                 if (spec.sum === chars.length || !style.length) {
-                    return '<span>' + spec.str + '</span>';
+                    return '<span>' + make_string(spec) + '</span>';
+                } else if (spec.specs.length > 1) {
+                    return wrap(style, spec.specs.map(function(spec) {
+                        return wrap(char_width_prop(spec.len), spec.chr);
+                    }).join(''));
                 } else {
-                    return '<span style="' + style + '">' + spec.str + '</span>';
+                    return wrap(style, make_string(spec));
                 }
             }).join('');
+        }
+        function make_string(spec) {
+            return spec.specs.map(function(spec) {
+                return spec.chr;
+            }).join('');
+        }
+        function wrap(style, str) {
+            return '<span style="' + style + '">' + str + '</span>';
         }
         return text;
     }
     // ---------------------------------------------------------------------
     // :: Binary search utility
     // ---------------------------------------------------------------------
-    function binary_search(start, end, search_pos, compare_fn) {
+    function binary_search(start, end, search_pos, compare_fn, more_args) {
         var len = end - start;
         var mid = start + Math.floor(len / 2);
-        var cmp = compare_fn(search_pos, mid);
+        var args = [search_pos, mid].concat(more_args);
+        var cmp = compare_fn.apply(null, args);
         if (cmp === 0) {
             return mid;
         } else if (cmp > 0 && len > 1) {
@@ -3016,52 +4070,155 @@
                 mid,
                 end,
                 search_pos,
-                compare_fn
+                compare_fn,
+                more_args
             );
         } else if (cmp < 0 && len > 1) {
             return binary_search(
                 start,
                 mid,
                 search_pos,
-                compare_fn
+                compare_fn,
+                more_args
             );
         } else {
             return -1;
         }
     }
-    // ---------------------------------------------------------------------
-    // :: Cross-Browser selection utils
-    // ---------------------------------------------------------------------
-    var get_selected_text = (function() {
-        if (window.getSelection || document.getSelection) {
-            return function() {
-                var selection = (window.getSelection || document.getSelection)();
-                if (selection.text) {
-                    return selection.text;
-                } else {
-                    return selection.toString();
-                }
-            };
-        } else if (document.selection && document.selection.type !== "Control") {
-            return function() {
-                return document.selection.createRange().text;
-            };
+    // -----------------------------------------------------------------
+    // :: selection utilities - should work in modern browser including IE9
+    // -----------------------------------------------------------------
+    function is_terminal_selected(cmd) {
+        if (is_function(window.getSelection)) {
+            var selection = window.getSelection();
+            if (selection.toString()) {
+                var node = selection.getRangeAt(0).startContainer.parentNode;
+                var term = $(node).closest('.terminal');
+                return term.length && (cmd && term.find('.cmd').is(cmd) || !cmd);
+            }
         }
-        return function() {
-            return '';
-        };
-    })();
+    }
+    // -----------------------------------------------------------------
+    function get_selected_html() {
+        var html = '';
+        if (is_function(window.getSelection)) {
+            var sel = window.getSelection();
+            if (sel.rangeCount) {
+                var container = document.createElement('div');
+                for (var i = 0, len = sel.rangeCount; i < len; ++i) {
+                    container.appendChild(sel.getRangeAt(i).cloneContents());
+                }
+                html = container.innerHTML;
+            }
+        }
+        return html;
+    }
+    // -----------------------------------------------------------------
+    function with_selection(fn) {
+        var html = '';
+        var ranges = [];
+        if (is_function(window.getSelection)) {
+            var selection = window.getSelection();
+            if (selection.rangeCount) {
+                var container = document.createElement("div");
+                for (var i = 0, len = selection.rangeCount; i < len; ++i) {
+                    var range = selection.getRangeAt(i).cloneRange();
+                    ranges.push(range);
+                    container.appendChild(range.cloneContents());
+                }
+                html = container.innerHTML;
+            }
+        }
+        fn(html);
+        if (ranges.length) {
+            selection.removeAllRanges();
+            ranges.forEach(function(range) {
+                selection.addRange(range);
+            });
+        }
+        return html !== '';
+    }
+    // -----------------------------------------------------------------
+    function process_selected_line() {
+        var $self = $(this);
+        var result = $self.text();
+        if ($self.hasClass('cmd-end-line')) {
+            result += '\n';
+        }
+        return result;
+    }
+    // -----------------------------------------------------------------
+    function process_div(element) {
+        // span is empty line, div is default case with text
+        return $(element).find('> div, > span')
+            .map(process_selected_line).get().join('\n').replace(/\n$/, '');
+    }
+    // -----------------------------------------------------------------
+    function process_selected_html(html) {
+        var stdout;
+        var text = '';
+        var $html = $('<div>' + html + '</div>');
+        if (html.match(/<\/div>/)) {
+            // match multiple echo output
+            stdout = $html.find('div[data-index]').map(function() {
+                return process_div(this);
+            }).get().join('\n');
+            // match inside single echo output
+            if (!stdout && html.match(/style="width: 100%;?"/)) {
+                stdout = process_div($html);
+            }
+            text = stdout;
+        }
+        var $prompt = $html.find('.cmd-prompt');
+        if ($prompt.length) {
+            if (text.length) {
+                text += '\n';
+            }
+            text += $prompt.text();
+        }
+        var $cmd_lines = $html.find('[role="presentation"]');
+        if ($cmd_lines.length) {
+            text += $cmd_lines.map(process_selected_line).get().join('');
+        }
+        if (!text.length && html) {
+            text = $html.text();
+        }
+        return text.replace(/\xA0/g, ' '); // fix &nbsp; space
+    }
     // ---------------------------------------------------------------------
-    // :: try to copy given DOM element text to clipboard
-    // -----------------------------------------------------------------------
-    function text_to_clipboard(container, text) {
-        var $div = $('<div>' + text.replace(/\n/, '<br/>') + '<div>');
-        $div.appendTo('body');
-        select_all($div[0]);
-        try {
-            document.execCommand('copy');
-        } catch (e) {}
-        $div.remove();
+    // :: copy given DOM element text to clipboard
+    // ---------------------------------------------------------------------
+    var text_to_clipboard;
+    if (is_function(document.queryCommandSupported) &&
+        document.queryCommandSupported('copy')) {
+        text_to_clipboard = function text_to_clipboard($textarea, text) {
+            var val = $textarea.val();
+            var had_focus = $textarea.is(':focus');
+            var pos = $textarea.caret();
+            if (window.navigator && window.navigator.clipboard) {
+                navigator.clipboard.writeText(text);
+            } else if (had_focus) {
+                $textarea.val(text).focus();
+                $textarea[0].select();
+                document.execCommand('copy');
+                $textarea.val(val);
+                $textarea.caret(pos);
+            } else {
+                var $text = $('<textarea/>').css({
+                    position: 'fixed',
+                    top: 0,
+                    left: 0
+                }).appendTo('body');
+                $text.val(text).focus();
+                $text[0].select();
+                document.execCommand('copy');
+                $text.blur();
+                $text.remove();
+            }
+            return true;
+        };
+    } else {
+        text_to_clipboard = $.noop;
     }
     // ---------------------------------------------------------------------
     var get_textarea_selection = (function() {
@@ -3161,20 +4318,6 @@
             return $.noop;
         }
     })();
-    // ---------------------------------------------------------------------
-    function select_all(element) {
-        if (window.getSelection) {
-            var selection = window.getSelection();
-            if (selection.setBaseAndExtent) {
-                selection.setBaseAndExtent(element, 0, element, 1);
-            } else if (document.createRange) {
-                var range = document.createRange();
-                range.selectNodeContents(element);
-                selection.removeAllRanges();
-                selection.addRange(range);
-            }
-        }
-    }
     // -------------------------------------------------------------------------
     function process_command(string, fn) {
         var array = string.match(command_re) || [];
@@ -3192,7 +4335,7 @@
                 var m = arg.match(/^(['"]).*\1$/);
                 return m && m[1] || '';
             });
-            var rest = string.substring(name.length).trim();
+            var rest = string.slice(name.length).trim();
             return {
                 command: string,
                 name: name,
@@ -3214,7 +4357,7 @@
     $.terminal = {
         version: '{{VER}}',
         date: '{{DATE}}',
-        // colors from http://www.w3.org/wiki/CSS/Properties/color/keywords
+        // colors from https://www.w3.org/wiki/CSS/Properties/color/keywords
         color_names: [
             'transparent', 'currentcolor', 'black', 'silver', 'gray', 'white',
             'maroon', 'red', 'purple', 'fuchsia', 'green', 'lime', 'olive',
@@ -3248,7 +4391,7 @@
             'seagreen', 'seashell', 'sienna', 'silver', 'skyblue', 'slateblue',
             'slategray', 'slategrey', 'snow', 'springgreen', 'steelblue', 'tan',
             'teal', 'thistle', 'tomato', 'turquoise', 'violet', 'wheat',
-            'white', 'whitesmoke', 'yellow', 'yellowgreen'],
+            'white', 'whitesmoke', 'yellow', 'yellowgreen', 'rebeccapurple'],
         // for unit tests
         Cycle: Cycle,
         History: History,
@@ -3300,44 +4443,30 @@
         // :: source https://stackoverflow.com/a/46756077/387194
         // ---------------------------------------------------------------------
         tracking_replace: function tracking_replace(string, rex, replacement, position) {
+            if (!(rex instanceof RegExp)) {
+                throw new Error('tracking_replace: Second argument need to be RegExp');
+            }
             function substring(string, start, end) {
-                return string.substring(start, end);
+                return string.slice(start, end);
             }
             function length(string) {
                 return $.terminal.strip(string).length;
-            }
-            // we need to correct position from regex and match to take into account
-            // characters that are created from more when one code point like
-            // emoji or surogate pairs #422
-            function correct_index(index) {
-                var len = length(string.substring(0, index));
-                for (var i = index; i < string.length; ++i) {
-                    var next_len = length(string.substring(0, i));
-                    if (next_len === len + 1) {
-                        return len;
-                    }
-                    len = next_len;
-                }
-                return len;
             }
             var new_string = "";
             var match;
             var index = 0;
             var rep_string;
-            var new_position = correct_index(position);
+            var new_position = position;
             var start;
             rex.lastIndex = 0; // Just to be sure
             while ((match = rex.exec(string))) {
                 // if regex don't have g flag lastIndex will not work
                 if (rex.global) {
-                    // fix lastIndex for emoji and characters
-                    // that have more then one codepoint
-                    var i = correct_index(rex.lastIndex);
                     // Add any of the original string we just skipped
-                    var last_index = length(substring(string, 0, i));
+                    var last_index = length(substring(string, 0, rex.lastIndex));
                     start = last_index - length(match[0]);
                 } else {
-                    start = correct_index(match.index);
+                    start = match.index;
                     last_index = start + length(match[0]);
                 }
                 if (index < start) {
@@ -3361,17 +4490,19 @@
                 // If the position is affected...
                 if (start < position) {
                     // ... update it:
+                    var rep_len = length(rep_string);
+                    rep_len += count_selfclosing_formatting(rep_string);
                     if (last_index < position) {
                         // It's after the replacement, move it
                         new_position = Math.max(
                             0,
                             new_position +
-                            length(rep_string) -
+                            rep_len -
                             length(match[0])
                         );
                     } else {
                         // It's *in* the replacement, put it just after
-                        new_position += length(rep_string) - (position - start);
+                        new_position += rep_len - (position - start);
                     }
                 }
                 // If the regular expression doesn't have the g flag, break here so
@@ -3396,13 +4527,12 @@
         // ---------------------------------------------------------------------
         iterate_formatting: function iterate_formatting(string, callback) {
             function is_space(i) {
-                return string.substring(i - 6, i) === '&nbsp;' ||
-                    string.substring(i - 1, i).match(/\s/);
+                return string.slice(i - 6, i) === '&nbsp;' ||
+                    string.slice(i - 1, i).match(/\s/);
             }
             // ----------------------------------------------------------------
-            var entity_re = /^(&(?:[a-z\d]+|#\d+|#x[a-f\d]+);)/i;
             function match_entity(index) {
-                return string.substring(index).match(entity_re);
+                return string.slice(index).match(entity_re);
             }
             // ----------------------------------------------------------------
             function is_open_formatting(i) {
@@ -3410,12 +4540,43 @@
             }
             // ----------------------------------------------------------------
             function is_escape_bracket(i) {
-                return string[i] === ']' && string[i - 1] === '\\';
+                return string[i - 1] !== '\\' && string[i] === '\\' &&
+                    string[i + 1] === ']';
             }
             // ----------------------------------------------------------------
             function is_text(i) {
                 return not_formatting && (string[i] !== ']' || !have_formatting)
                     && !opening;
+            }
+            // ----------------------------------------------------------------
+            // :: function will skip to next character in main loop
+            // :: TODO: improve performance of emoji regex and check whole
+            // :: string it's complex string if not use simple function
+            // ----------------------------------------------------------------
+            var get_next_character = make_next_char_fun(string);
+            function next_iteration() {
+                var char = get_next_character(substring);
+                if (char.length > 1 && $.terminal.length(substring) > 1) {
+                    return char.length - 1;
+                }
+                return 0;
+            }
+            // ----------------------------------------------------------------
+            function is_next_space() {
+                return (is_space(i) && (not_formatting || opening)) &&
+                    (space === -1 && prev_space !== i || space !== -1);
+            }
+            // ----------------------------------------------------------------
+            // :: last iteration or one before closing formatting
+            // ----------------------------------------------------------------
+            var last = false;
+            function is_last() {
+                if (i === string.length - 1 && !last) {
+                    last = true;
+                } else {
+                    last = !!substring.match(/^.]$/);
+                }
+                return last;
             }
             // ----------------------------------------------------------------
             var have_formatting = $.terminal.have_formatting(string);
@@ -3424,10 +4585,13 @@
             var count = 0;
             var match;
             var space = -1;
+            var space_count = -1;
             var prev_space;
             var length = 0;
+            var offset = 0;
+            var re_ent = /(&[^;]+);$/;
             for (var i = 0; i < string.length; i++) {
-                var substring = string.substring(i);
+                var substring = string.slice(i);
                 match = substring.match(format_start_re);
                 if (match) {
                     formatting = match[1];
@@ -3446,12 +4610,12 @@
                 }
                 var not_formatting = (formatting && in_text) || !formatting;
                 var opening = is_open_formatting(i);
-                if (is_space(i) && (not_formatting || opening)) {
-                    if (space === -1 && prev_space !== i || space !== -1) {
-                        space = i;
-                    }
+                if (is_next_space()) {
+                    space = i;
+                    space_count = count;
                 }
                 var braket = string[i].match(/[[\]]/);
+                offset = 0;
                 if (not_formatting) {
                     // treat entity as one character
                     if (string[i] === '&') {
@@ -3463,9 +4627,11 @@
                         ++count;
                         ++length;
                     } else if (is_escape_bracket(i)) {
-                        // escape \] counts as one character
-                        --count;
-                        --length;
+                        // escape \] and \\ counts as one character
+                        ++count;
+                        ++length;
+                        offset = 1;
+                        i += 1;
                     } else if (!braket || !have_formatting) {
                         ++count;
                         ++length;
@@ -3475,13 +4641,26 @@
                     if (strlen(string[i]) === 2) {
                         length++;
                     }
+                    var char = get_next_character(substring);
+                    var size = char.length;
+                    // begining of enity that we've skipped, we are at the end
+                    if (char === ';') {
+                        match = string.slice(0, i + 1).match(re_ent);
+                        if (match) {
+                            offset = match[1].length;
+                            size = offset + 1;
+                        }
+                    }
                     var data = {
+                        last: is_last(),
                         count: count,
-                        index: i,
+                        index: i - offset,
                         formatting: formatting,
                         length: length,
                         text: in_text,
-                        space: space
+                        size: size,
+                        space: space,
+                        space_count: space_count
                     };
                     var ret = callback(data);
                     if (ret === false) {
@@ -3502,7 +4681,10 @@
                             continue;
                         }
                     }
-                } else if (i === string.length - 1) {
+                } else if (i === string.length - 1 && !last) {
+                    // last iteration, if formatting have last bracket,
+                    // from formatting, then last iteration
+                    // was already called (in if) #550
                     callback({
                         count: count + 1,
                         index: i,
@@ -3513,35 +4695,73 @@
                     });
                 }
                 // handle emoji, suroggate pairs and combine characters
-                var char = get_next_character(substring);
-                if (char.length > 1) {
-                    i += char.length - 1;
+                if (in_text) {
+                    i += next_iteration();
                 }
             }
+        },
+        // ---------------------------------------------------------------------
+        // :: function return string splitted into single characters
+        // :: each character is wrapped into formatting from input string
+        // :: or empty formatting so it will create span when using with ::format
+        // ---------------------------------------------------------------------
+        partition: function partition(string) {
+            if (!$.terminal.have_formatting(string)) {
+                var chars = $.terminal.split_characters(string);
+                return chars.map(wrap);
+            }
+            var result = [];
+            function wrap(string) {
+                if (string.match(/\\$/)) {
+                    string += '\\';
+                }
+                return '[[;;]' + string + ']';
+            }
+            function formatting(string) {
+                if ($.terminal.is_formatting(string)) {
+                    if (string.match(/\\]$/)) {
+                        string = string.replace(/\\]/g, '\\\\]');
+                    }
+                } else {
+                    string = wrap(string);
+                }
+                return string;
+            }
+            $.terminal.iterate_formatting(string, function(data) {
+                if (data.text) {
+                    var text = [];
+                    if (data.formatting) {
+                        text.push(data.formatting);
+                    }
+                    text.push(string.substring(data.index, data.index + data.size));
+                    if (data.formatting) {
+                        text.push(']');
+                    }
+                    result.push(formatting(text.join('')));
+                }
+            });
+            return result;
         },
         // ---------------------------------------------------------------------
         // :: formatting aware substring function
         // ---------------------------------------------------------------------
         substring: function substring(string, start_index, end_index) {
-            var chars = $.terminal.split_characters(text(string));
+            var chars = $.terminal.split_characters(string);
             if (!chars.slice(start_index, end_index).length) {
                 return '';
+            }
+            if (!$.terminal.have_formatting(string)) {
+                return chars.slice(start_index, end_index).join('');
             }
             var start = 0;
             var end;
             var start_formatting = '';
             var end_formatting = '';
             var prev_index;
-            var re = /(&[^;]+);$/;
+            var offset = 1;
             $.terminal.iterate_formatting(string, function(data) {
-                var m;
                 if (start_index && data.count === start_index + 1) {
                     start = data.index;
-                    // correct index for html entity
-                    m = string.substring(0, start + 1).match(re);
-                    if (m) {
-                        start -= m[1].length;
-                    }
                     if (data.formatting) {
                         start_formatting = data.formatting;
                     }
@@ -3549,15 +4769,12 @@
                 if (end_index && data.count === end_index) {
                     end_formatting = data.formatting;
                     prev_index = data.index;
+                    offset = data.size;
                 }
                 if (data.count === end_index + 1) {
                     end = data.index;
-                    m = string.substring(0, end + 1).match(re);
-                    if (m) {
-                        end -= m[1].length;
-                    }
                     if (data.formatting) {
-                        end = prev_index + 1;
+                        end = prev_index + offset;
                     }
                 }
             });
@@ -3567,7 +4784,7 @@
             if (end === undefined) {
                 end = string.length;
             }
-            string = start_formatting + string.substring(start, end);
+            string = start_formatting + string.slice(start, end);
             if (end_formatting) {
                 string = string.replace(/(\[\[^\]]+)?\]$/, '');
                 string += ']';
@@ -3576,10 +4793,13 @@
         },
         // ---------------------------------------------------------------------
         // :: add format text as 5th paramter to formatting it's used for
-        // :: data attribute in format function
+        // :: data attribute in format function - and fix unclosed &
         // ---------------------------------------------------------------------
         normalize: function normalize(string) {
-            return string.replace(format_re, function(_, format, text) {
+            string = string.replace(format_re, function(_, format, text) {
+                if (format.match(self_closing_re) && text === '') {
+                    return '[[' + format + '] ]';
+                }
                 if (text === '') {
                     return '';
                 }
@@ -3599,14 +4819,15 @@
                     semicolons = ';;';
                 } else if (semicolons === 3) {
                     semicolons = ';';
-                } else {
-                    semicolons = '';
                 }
                 // return '[[' + format + ']' + text + ']';
                 // closing braket will break formatting so we need to escape
                 // those using html entity equvalent
-                return '[[' + format + semicolons + safe(text) + ']' + text + ']';
+                // space is hack for images that break iterate_formatting
+                format += semicolons + safe(text);
+                return '[[' + format + ']' + text + ']';
             });
+            return $.terminal.amp(string);
         },
         // ---------------------------------------------------------------------
         // :: split text into lines with equal length so each line can be
@@ -3622,40 +4843,46 @@
                     continue;
                 }
                 var line = array[i];
+                var get_next_character = make_next_char_fun(line);
                 var first_index = 0;
                 var output;
                 var line_length = line.length;
-                var chars = $.terminal.split_characters(text(line));
-                var last_char = chars[chars.length - 1];
+                var last_bracket = !!line.match(/\[\[[^\]]+\](?:[^\][]|\\\])+\]$/);
                 $.terminal.iterate_formatting(line, function(data) {
-                    var last_iteraction = data.index === line_length - last_char.length;
                     var chr, substring;
-                    if (data.length >= length || last_iteraction ||
+                    if (data.length >= length || data.last ||
                         (data.length === length - 1 &&
                          strlen(line[data.index + 1]) === 2)) {
                         var can_break = false;
+                        // TODO: this need work
                         if (keep_words && data.space !== -1) {
                             // replace html entities with characters
-                            var stripped = text(line.substring(data.space));
+                            var stripped = text(line).substring(data.space_count);
                             // real length, not counting formatting
-                            var text_len = stripped.length;
-                            var limit = data.index + length + 1;
-                            stripped = stripped.substring(0, limit);
-                            if (stripped.match(/\s|&nbsp;/) || limit > text_len) {
+                            stripped = stripped.slice(0, length).trim();
+                            var text_len = strlen(stripped);
+                            if (stripped.match(/\s/) || text_len < length) {
                                 can_break = true;
                             }
                         }
                         // if words is true we split at last space and make next loop
                         // continue where the space where located
+                        var after_index = data.index + data.size;
+                        if (last_bracket) {
+                            after_index += 1;
+                        }
                         var new_index;
                         if (keep_words && data.space !== -1 &&
-                            data.index !== line_length - 1 && can_break) {
-                            output = line.substring(first_index, data.space);
+                            after_index !== line_length && can_break) {
+                            output = line.slice(first_index, data.space);
                             new_index = data.space - 1;
                         } else {
-                            substring = line.substring(data.index);
+                            substring = line.slice(data.index);
                             chr = get_next_character(substring);
-                            output = line.substring(first_index, data.index) + chr;
+                            output = line.slice(first_index, data.index) + chr;
+                            if (data.last && last_bracket && chr !== ']') {
+                                output += ']';
+                            }
                             new_index = data.index + chr.length - 1;
                         }
                         if (keep_words) {
@@ -3692,7 +4919,7 @@
         // :: Escape & that's not part of entity
         // ---------------------------------------------------------------------
         amp: function amp(str) {
-            return str.replace(/&(?!#[0-9]+;|[a-zA-Z]+;)/g, '&amp;');
+            return str.replace(/&(?!#[0-9]+;|#x[0-9a-f]+;|[a-z]+;)/gi, '&amp;');
         },
         // ---------------------------------------------------------------------
         // :: Encode formating as html for insertion into DOM
@@ -3740,20 +4967,68 @@
             }
             var stack = [];
             var re = /((?:\[\[(?:[^\][]|\\\])+\])?(?:[^\][]|\\\])*\]?)/;
-            var format_re = /(\[\[(?:[^\][]|\\\])+\])[\s\S]*/;
-            return string.split(re).filter(Boolean).map(function(string) {
-                if (string.match(/^\[\[/)) {
-                    if (!$.terminal.is_formatting(string)) {
-                        string += ']';
-                        stack.push(string.replace(format_re, '$1'));
+            var format_re = /\[\[([^\][]+)\][\s\S]*/;
+            var format_split_re = /^\[\[([^;]*);([^;]*);([^\]]*)\]/;
+            function get_inherit_style(stack) {
+                var output = [[], '', ''];
+                if (!stack.length) {
+                    return output;
+                }
+                for (var i = stack.length; i--;) {
+                    var formatting = stack[i].split(';');
+                    var style = formatting[0].split(/(-?[@!gbiuso])/g).filter(Boolean);
+                    style.forEach(function(s) {
+                        if (output[0].indexOf(s) === -1) {
+                            output[0].push(s);
+                        }
+                    });
+                    for (var j = 1; j < output.length; ++j) {
+                        var value = formatting[j].trim();
+                        if (value && !output[j]) {
+                            output[j] = value;
+                        }
                     }
+                }
+                var ignore = output[0].filter(function(s) {
+                    return s[0] === '-';
+                }).map(function(s) {
+                    return s[1];
+                });
+                output[0] = output[0].filter(function(s) {
+                    return ignore.indexOf(s) === -1 && ignore.indexOf(s[1]) === -1;
+                }).join('');
+                return output.join(';');
+            }
+            return string.split(re).filter(Boolean).map(function(string) {
+                var style;
+                if (string.match(/^\[\[/)) {
+                    var formatting = string.replace(format_re, '$1');
+                    var is_formatting = $.terminal.is_formatting(string);
+                    string = string.replace(format_split_re, '');
+                    stack.push(formatting);
+                    if ($.terminal.nested_formatting.__inherit__) {
+                        style = get_inherit_style(stack);
+                    } else {
+                        style = formatting;
+                    }
+                    if (!is_formatting) {
+                        string += ']';
+                    } else {
+                        stack.pop();
+                    }
+                    string = '[[' + style + ']' + string;
                 } else {
                     var pop = false;
                     if (string.match(/\]/)) {
                         pop = true;
                     }
                     if (stack.length) {
-                        string = stack[stack.length - 1] + string;
+                        if ($.terminal.nested_formatting.__inherit__) {
+                            style = get_inherit_style(stack);
+                        } else {
+                            style = stack[stack.length - 1];
+                        }
+                        string = '[[' + style + ']' + string;
                     }
                     if (pop) {
                         stack.pop();
@@ -3775,7 +5050,7 @@
         // ---------------------------------------------------------------------
         apply_formatters: function apply_formatters(string, settings) {
             if (string === "") {
-                if (typeof settings.position === 'number') {
+                if (settings && typeof settings.position === 'number') {
                     return ["", settings.position];
                 } else {
                     return "";
@@ -3803,7 +5078,7 @@
                         return [ret, options.position];
                     }
                     return input;
-                } else if (ret instanceof Array && ret.length === 2) {
+                } else if (is_array(ret) && ret.length === 2) {
                     return ret;
                 } else {
                     return input;
@@ -3847,7 +5122,7 @@
                             if ($.terminal.is_formatting(string)) {
                                 return [string, -1];
                             } else {
-                                if (formatter instanceof Array) {
+                                if (is_array(formatter)) {
                                     var options = formatter[2] || {};
                                     result = [string, position < 0 ? 0 : position];
                                     if (result[0].match(formatter[0])) {
@@ -3902,6 +5177,7 @@
                         }
                         // to make sure that output position is not outside the string
                         var max = text(string).length;
+                        max += count_selfclosing_formatting(string);
                         if (position > max) {
                             position = max;
                         }
@@ -3936,23 +5212,215 @@
         // :: Replace terminal formatting with html
         // ---------------------------------------------------------------------
         format: function format(str, options) {
-            function safe_text(string) {
-                if (string.match(/\\]/)) {
-                    string = string.replace(/(\\+)]/g, function(_, slashes) {
-                        if (slashes.length % 2 === 1) {
-                            return ']';
-                        } else {
-                            return slashes.replace(/../, '\\');
-                        }
-                    });
-                }
-                return safe(string);
-            }
             var settings = $.extend({}, {
                 linksNoReferrer: false,
                 linksNoFollow: false,
+                allowedAttributes: [],
+                char_width: undefined,
+                escape: true,
                 anyLinks: false
             }, options || {});
+            // -----------------------------------------------------------------
+            function filter_attr_names(names) {
+                if (names.length && settings.allowedAttributes.length) {
+                    return names.filter(function(name) {
+                        if (name === 'data-text') {
+                            return false;
+                        }
+                        var allowed = false;
+                        var filters = settings.allowedAttributes;
+                        for (var i = 0; i < filters.length; ++i) {
+                            if (filters[i] instanceof RegExp) {
+                                if (filters[i].test(name)) {
+                                    allowed = true;
+                                    break;
+                                }
+                            } else if (filters[i] === name) {
+                                allowed = true;
+                                break;
+                            }
+                        }
+                        return allowed;
+                    });
+                }
+                return [];
+            }
+            // -----------------------------------------------------------------
+            function clean_data(data, text) {
+                if (data === '') {
+                    return text;
+                } else {
+                    return data.replace(/&#93;/g, ']')
+                        .replace(/>/g, '&gt;').replace(/</g, '&lt;');
+                }
+            }
+            // -----------------------------------------------------------------
+            function add_attrs(attrs) {
+                if (attrs) {
+                    var keys = filter_attr_names(Object.keys(attrs));
+                    if (keys.length) {
+                        return ' ' + keys.map(function(name) {
+                            var value = attrs[name].replace(/"/g, '&quot;');
+                            return name + '="' + value + '"';
+                        }).join(' ');
+                    }
+                }
+                return '';
+            }
+            // -----------------------------------------------------------------
+            function rel_attr() {
+                var rel = ["noopener"];
+                if (settings.linksNoReferrer) {
+                    rel.unshift("noreferrer");
+                }
+                if (settings.linksNoFollow) {
+                    rel.unshift("nofollow");
+                }
+                return rel;
+            }
+            // -----------------------------------------------------------------
+            // test if this is valid Path
+            // -----------------------------------------------------------------
+            function is_path(url) {
+                return url.match(/^\.{1,2}\//) ||
+                    url.match(/^\//) ||
+                    !(url.match(/\//) || url.match(/^[^:]+:/));
+            }
+            // -----------------------------------------------------------------
+            function with_url_validation(fn) {
+                return function(url) {
+                    if (settings.anyLinks) {
+                        return true;
+                    }
+                    var test = fn(url);
+                    if (!test) {
+                        warn('Invalid URL ' + url + ' only https ftp and Path ' +
+                             'are allowed');
+                    }
+                    return test;
+                };
+            }
+            // -----------------------------------------------------------------
+            var valid_href = with_url_validation(function(url) {
+                return url.match(/^((https?|ftp):\/\/|\.{0,2}\/)/) || is_path(url);
+            });
+            // -----------------------------------------------------------------
+            var valid_src = with_url_validation(function(url) {
+                return url.match(/^(https?:|blob:|data:)/) || is_path(url);
+            });
+            // -----------------------------------------------------------------
+            function format(s, style, color, background, _class, data_text, text) {
+                var attrs;
+                if (data_text.match(/;/)) {
+                    try {
+                        var splitted = data_text.split(';');
+                        var str = splitted.slice(1).join(';')
+                            .replace(/&nbsp;/g, ' ')
+                            .replace(/&lt;/g, '<')
+                            .replace(/&gt;/g, '>');
+                        if (str.match(/^\s*\{[^}]*\}\s*$/)) {
+                            attrs = JSON.parse(str);
+                            data_text = splitted[0];
+                        }
+                    } catch (e) {
+                    }
+                }
+                if (text === '' && !style.match(/@/)) {
+                    return ''; //'<span>&nbsp;</span>';
+                }
+                text = safe(text);
+                text = text.replace(/\\\]/g, '&#93;');
+                if (settings.escape) {
+                    // inside formatting we need to unescape escaped slashes
+                    // but this escape is not needed when echo - don't know why
+                    text = text.replace(/\\\\/g, '\\');
+                }
+                var style_str = '';
+                if (style.indexOf('b') !== -1) {
+                    style_str += 'font-weight:bold;';
+                }
+                var text_decoration = [];
+                if (style.indexOf('u') !== -1) {
+                    text_decoration.push('underline');
+                }
+                if (style.indexOf('s') !== -1) {
+                    text_decoration.push('line-through');
+                }
+                if (style.indexOf('o') !== -1) {
+                    text_decoration.push('overline');
+                }
+                if (text_decoration.length) {
+                    style_str += 'text-decoration:' +
+                        text_decoration.join(' ') + ';';
+                }
+                if (style.indexOf('i') !== -1) {
+                    style_str += 'font-style:italic;';
+                }
+                if ($.terminal.valid_color(color)) {
+                    style_str += 'color:' + color + ';' +
+                        '--color:' + color + ';';
+                    if (style.indexOf('!') !== -1) {
+                        style_str += '--link-color:' + color + ';';
+                    }
+                    if (style.indexOf('g') !== -1) {
+                        style_str += 'text-shadow:0 0 5px ' + color + ';';
+                    }
+                }
+                if ($.terminal.valid_color(background)) {
+                    style_str += 'background-color:' + background + ';';
+                }
+                var data = clean_data(data_text, text);
+                var extra = extra_css(text, settings);
+                if (extra) {
+                    text = wide_characters(text, settings);
+                    style_str += extra;
+                }
+                var result;
+                if (style.indexOf('!') !== -1) {
+                    if (data.match(email_re)) {
+                        result = '<a href="mailto:' + data + '"';
+                    } else {
+                        // only http and ftp links (prevent javascript)
+                        // unless user force it with anyLinks option
+                        if (!valid_href(data)) {
+                            data = '';
+                        }
+                        result = '<a target="_blank"';
+                        if (data) {
+                            result += ' href="' + data + '"';
+                        }
+                        result += ' rel="' + rel_attr().join(' ') + '"';
+                    }
+                    // make focus to terminal textarea that will enable
+                    // terminal when pressing tab and terminal is disabled
+                    result += ' tabindex="1000"';
+                } else if (style.indexOf('@') !== -1) {
+                    result = '<img';
+                    if (valid_src(data)) {
+                        result += ' src="' + data + '"';
+                    }
+                } else {
+                    result = '<span';
+                }
+                result += add_attrs(attrs);
+                if (style_str !== '') {
+                    result += ' style="' + style_str + '"';
+                }
+                if (_class !== '') {
+                    result += ' class="' + _class + '"';
+                }
+                // links and image need data-text attribute cmd click behavior
+                // formatter can return links.
+                if (style.indexOf('!') !== -1) {
+                    result += ' data-text>' + text + '</a>';
+                } else if (style.indexOf('@') !== -1) {
+                    result += ' data-text/>';
+                } else {
+                    result += ' data-text="' + data.replace(/"/g, '&quot;') + '">' +
+                        text + '</span>';
+                }
+                return result;
+            }
             if (typeof str === 'string') {
                 // support for formating foo[[u;;]bar]baz[[b;#fff;]quux]zzz
                 var splitted = $.terminal.format_split(str);
@@ -3965,107 +5433,13 @@
                         text = text.replace(/\[\[[^\]]+\]/, function(text) {
                             return text.replace(/&nbsp;/g, ' ');
                         });
-                        return text.replace(format_parts_re, function(
-                            s,
-                            style,
-                            color,
-                            background,
-                            _class,
-                            data_text,
-                            text
-                        ) {
-                            if (text === '') {
-                                return ''; //'<span>&nbsp;</span>';
-                            }
-                            text = safe_text(text);
-                            var style_str = '';
-                            if (style.indexOf('b') !== -1) {
-                                style_str += 'font-weight:bold;';
-                            }
-                            var text_decoration = [];
-                            if (style.indexOf('u') !== -1) {
-                                text_decoration.push('underline');
-                            }
-                            if (style.indexOf('s') !== -1) {
-                                text_decoration.push('line-through');
-                            }
-                            if (style.indexOf('o') !== -1) {
-                                text_decoration.push('overline');
-                            }
-                            if (text_decoration.length) {
-                                style_str += 'text-decoration:' +
-                                    text_decoration.join(' ') + ';';
-                            }
-                            if (style.indexOf('i') !== -1) {
-                                style_str += 'font-style:italic;';
-                            }
-                            if ($.terminal.valid_color(color)) {
-                                style_str += 'color:' + color + ';' +
-                                    '--color:' + color + ';';
-                                if (style.indexOf('g') !== -1) {
-                                    style_str += 'text-shadow:0 0 5px ' + color + ';';
-                                }
-                            }
-                            if ($.terminal.valid_color(background)) {
-                                style_str += 'background-color:' + background;
-                            }
-                            var data;
-                            if (data_text === '') {
-                                data = text;
-                            } else {
-                                data = data_text.replace(/&#93;/g, ']')
-                                    .replace(/>/g, '&gt;').replace(/</g, '&lt;');
-                            }
-                            var extra = extra_css(text, options);
-                            if (extra) {
-                                text = wide_characters(text, options);
-                                style_str += extra;
-                            }
-                            var result;
-                            if (style.indexOf('!') !== -1) {
-                                if (data.match(email_re)) {
-                                    result = '<a href="mailto:' + data + '"';
-                                } else {
-                                    if (!settings.anyLinks &&
-                                        !data.match(/^(https?|ftp):\/\//)) {
-                                        data = '';
-                                    }
-                                    result = '<a target="_blank" href="' + data + '"';
-                                    var rel = ["noopener"];
-                                    if (settings.linksNoReferrer) {
-                                        rel.unshift("noreferrer");
-                                    }
-                                    if (settings.linksNoFollow) {
-                                        rel.unshift("nofollow");
-                                    }
-                                    result += ' rel="' + rel.join(' ') + '"';
-                                }
-                                // make focus to terminal textarea that will enable
-                                // terminal when pressing tab and terminal is disabled
-                                result += ' tabindex="1000"';
-                            } else {
-                                result = '<span';
-                            }
-                            if (style_str !== '') {
-                                result += ' style="' + style_str + '"';
-                            }
-                            if (_class !== '') {
-                                result += ' class="' + _class + '"';
-                            }
-                            if (style.indexOf('!') !== -1) {
-                                result += '>' + text + '</a>';
-                            } else {
-                                result += ' data-text="' +
-                                    data.replace(/"/g, '&quote;') + '">' +
-                                    text + '</span>';
-                            }
-                            return result;
-                        });
+                        return text.replace(format_parts_re, format);
                     } else {
-                        text = safe_text(text);
-                        var extra = extra_css(text, options);
+                        text = safe(text);
+                        text = text.replace(/\\\]/, '&#93;');
+                        var extra = extra_css(text, settings);
                         if (extra.length) {
-                            text = wide_characters(text, options);
+                            text = wide_characters(text, settings);
                             return '<span style="' + extra + '">' + text + '</span>';
                         } else {
                             return '<span>' + text + '</span>';
@@ -4092,23 +5466,25 @@
         // ---------------------------------------------------------------------
         // :: return number of characters without formatting
         // ---------------------------------------------------------------------
-        length: function(string) {
-            return $.terminal.split_characters(text(string)).length;
+        length: function(string, raw) {
+            return $.terminal.split_characters(raw ? string : text(string)).length;
         },
         // ---------------------------------------------------------------------
         // :: split characters handling emoji, surogate pairs and combine chars
         // ---------------------------------------------------------------------
         split_characters: function split_characters(string) {
             var result = [];
+            var get_next_character = make_next_char_fun(string);
             while (string.length) {
                 var chr = get_next_character(string);
-                string = string.substring(chr.length);
+                string = string.slice(chr.length);
                 result.push(chr);
             }
             return result;
         },
         // ---------------------------------------------------------------------
         // :: return string where array items are in columns padded spaces
+        // :: after adding align tabs arr.join('\t\t') looks much better
         // ---------------------------------------------------------------------
         columns: function(array, cols, space) {
             var no_formatting = array.map(function(string) {
@@ -4143,10 +5519,18 @@
         // :: Remove formatting from text
         // ---------------------------------------------------------------------
         strip: function strip(str) {
-            str = str.replace(format_parts_re, '$6');
-            return str.replace(/\\([[\]])/g, function(whole, bracket) {
-                return bracket;
-            });
+            if (!$.terminal.have_formatting(str)) {
+                return str;
+            }
+            return $.terminal.format_split(str).map(function(str) {
+                if ($.terminal.is_formatting(str)) {
+                    str = str.replace(format_parts_re, '$6');
+                    return str.replace(/\\([[\]])/g, function(whole, bracket) {
+                        return bracket;
+                    });
+                }
+                return str;
+            }).join('');
         },
         // ---------------------------------------------------------------------
         // :: Return active terminal
@@ -4262,21 +5646,19 @@
                 this.value = value;
             }
             var rest = arg.reduce(function(acc, arg) {
-                if (typeof arg !== 'string') {
-                    arg = String(arg);
-                }
-                if (arg.match(/^-/) && acc instanceof token) {
+                var str = typeof arg === 'string' ? arg : '';
+                if (str.match(/^--?[^-]/) && acc instanceof token) {
                     result[acc.value] = true;
                 }
-                if (arg.match(/^--/)) {
-                    var name = arg.replace(/^--/, '');
+                if (str.match(/^--[^-]/)) {
+                    var name = str.replace(/^--/, '');
                     if (settings.boolean.indexOf(name) === -1) {
                         return new token(name);
                     } else {
                         result[name] = true;
                     }
-                } else if (arg.match(/^-/)) {
-                    var single = arg.replace(/^-/, '').split('');
+                } else if (str.match(/^-[^-]/)) {
+                    var single = str.replace(/^-/, '').split('');
                     if (settings.boolean.indexOf(single.slice(-1)[0]) === -1) {
                         var last = single.pop();
                     }
@@ -4299,7 +5681,7 @@
             return result;
         },
         // ---------------------------------------------------------------------
-        // :: function executed for each text inside [{ .... }]
+        // :: function executed for each text inside [[ .... ]] in echo
         // ---------------------------------------------------------------------
         extended_command: function extended_command(term, string, options) {
             var settings = $.extend({
@@ -4373,6 +5755,8 @@
                 return obj;
             }
         },
+        // ---------------------------------------------------------------------
+        // :: object that can be used in string methods intead of regex
         // ---------------------------------------------------------------------
         formatter: new (function() {
             try {
@@ -4549,31 +5933,51 @@
     }
     */
     // -----------------------------------------------------------------------
+    function terminal_ready(term) {
+        return !!(term.closest('body').length &&
+                  term.is(':visible') &&
+                  term.find('.cmd-prompt').length);
+    }
+    // -----------------------------------------------------------------------
     // :: Create fake terminal to calcualte the dimention of one character
     // :: this will make terminal work if terminal div is not added to the
     // :: DOM at init like with:
     // :: $('<div/>').terminal().echo('foo bar').appendTo('body');
     // -----------------------------------------------------------------------
-    function get_char_size(div) {
-        var temp = $('<div class="terminal temp"><div class="terminal-output">' +
-                     '<div><div class="line" style="float: left"><span>&nbsp;</span>' +
-                     '</div></div></div></div>').appendTo('body');
-        temp.addClass(div.attr('class'));
-        if (div) {
-            var style = div.attr('style');
-            if (style) {
-                style = style.split(/\s*;\s*/).filter(function(s) {
-                    return !s.match(/display\s*:\s*none/i);
-                }).join(';');
-                temp.attr('style', style);
+    function get_char_size(term) {
+        var rect;
+        if (terminal_ready(term)) {
+            var $prompt = term.find('.cmd-prompt').clone().css({
+                visiblity: 'hidden',
+                position: 'absolute'
+            });
+            $prompt.appendTo(term.find('.cmd')).html('&nbsp;');
+            rect = $prompt[0].getBoundingClientRect();
+            $prompt.remove();
+        } else {
+            var temp = $('<div class="terminal terminal-temp"><div class="terminal-' +
+                         'wrapper"><div class="terminal-output"><div><div class="te' +
+                         'rminal-line" style="float: left"><span>&nbsp;</span></div' +
+                         '></div></div></div>').appendTo('body');
+            temp.addClass(term.attr('class')).attr('id', term.attr('id'));
+            if (term) {
+                var style = term.attr('style');
+                if (style) {
+                    style = style.split(/\s*;\s*/).filter(function(s) {
+                        return !s.match(/display\s*:\s*none/i);
+                    }).join(';');
+                    temp.attr('style', style);
+                }
             }
+            rect = temp.find('.terminal-line')[0].getBoundingClientRect();
         }
-        var rect = temp.find('.line')[0].getBoundingClientRect();
         var result = {
             width: rect.width,
             height: rect.height
         };
-        temp.remove();
+        if (temp) {
+            temp.remove();
+        }
         return result;
     }
     // -----------------------------------------------------------------------
@@ -4590,7 +5994,8 @@
     // :: Calculate number of lines that fit without scroll
     // -----------------------------------------------------------------------
     function get_num_rows(terminal, char_size) {
-        return Math.floor(terminal.find('.terminal-fill').height() / char_size.height);
+        var height = terminal.find('.terminal-fill').height();
+        return Math.floor(height / char_size.height);
     }
     // -----------------------------------------------------------------------
     function all(array, fn) {
@@ -4620,6 +6025,14 @@
         return get_type(object) === 'function';
     }
     // -----------------------------------------------------------------------
+    function is_promise(object) {
+        return is_function(object && (object.then || object.done));
+    }
+    // -----------------------------------------------------------------------
+    function is_array(object) {
+        return get_type(object) === 'array';
+    }
+    // -----------------------------------------------------------------------
     function get_type(object) {
         return typeof object === 'function' ? 'function' : $.type(object);
     }
@@ -4627,8 +6040,8 @@
     // :: TERMINAL PLUGIN CODE
     // -----------------------------------------------------------------------
     var version_set = !$.terminal.version.match(/^\{\{/);
-    var copyright = 'Copyright (c) 2011-2018 Jakub Jankiewicz <http://jcubic' +
-        '.pl/me>';
+    var copyright = 'Copyright (c) 2011-2020 Jakub T. Jankiewicz ' +
+        '<https://jcubic.pl/me>';
     var version_string = version_set ? ' v. ' + $.terminal.version : ' ';
     // regex is for placing version string aligned to the right
     var reg = new RegExp(' {' + version_string.length + '}$');
@@ -4638,7 +6051,7 @@
     // :: Terminal Signatures
     // -----------------------------------------------------------------------
     var signatures = [
-        ['jQuery Terminal', '(c) 2011-2018 jcubic'],
+        ['jQuery Terminal', '(c) 2011-2020 jcubic'],
         [name_ver, copyright.replace(/^Copyright | *<.*>/g, '')],
         [name_ver, copyright.replace(/^Copyright /, '')],
         [
@@ -4671,6 +6084,8 @@
     // :: Default options
     // -----------------------------------------------------------------------
     $.terminal.nested_formatting.__meta__ = true;
+    // if set to true nested formatting will inherit styles from styles outside
+    $.terminal.nested_formatting.__inherit__ = false;
     // nested formatting will always return different length so we silent the warning
     $.terminal.nested_formatting.__no_warn__ = true;
     $.terminal.defaults = {
@@ -4683,10 +6098,13 @@
         wrap: true,
         checkArity: true,
         raw: false,
+        tabindex: 1,
         invokeMethods: false,
         exceptionHandler: null,
         pauseEvents: true,
         softPause: false,
+        mousewheel: null,
+        touchscroll: null,
         memory: false,
         cancelableAjax: true,
         processArguments: true,
@@ -4696,6 +6114,8 @@
         processRPCResponse: null,
         completionEscape: true,
         onCommandChange: null,
+        mobileDelete: is_mobile,
+        onPositionChange: null,
         convertLinks: true,
         extra: {},
         tabs: 4,
@@ -4718,11 +6138,16 @@
         clickTimeout: 200,
         holdTimeout: 400,
         holdRepeatTimeout: 200,
+        repeatTimeoutKeys: [],
+        mobileIngoreAutoSpace: [],
         request: $.noop,
         response: $.noop,
         describe: 'procs',
         onRPCError: null,
+        keymap: null,
         doubleTab: null,
+        doubleTabEchoCommand: false,
+        ansiParser: {},
         completion: false,
         onInit: $.noop,
         onClear: $.noop,
@@ -4734,9 +6159,19 @@
         onPop: $.noop,
         keypress: $.noop,
         keydown: $.noop,
+        renderHandler: null,
         onAfterRedraw: $.noop,
         onEchoCommand: $.noop,
+        onPaste: $.noop,
         onFlush: $.noop,
+        onBeforeCommand: null,
+        onAfterCommand: null,
+        onBeforeEcho: null,
+        onAfterEcho: null,
+        onBeforeLogin: null,
+        onAfterLogout: null,
+        onBeforeLogout: null,
+        allowedAttributes: ['title', /^aria-/, 'id', /^data-/],
         strings: {
             comletionParameters: 'From version 1.0.0 completion function need to' +
                 ' have two arguments',
@@ -4764,7 +6199,7 @@
             invalidTerminalId: 'Invalid Terminal ID',
             login: 'login',
             password: 'password',
-            recursiveCall: 'Recursive call detected, skip',
+            recursiveLoop: 'Recursive loop in echo detected, skip',
             notAString: '%s function: argument is not a string',
             redrawError: 'Internal error, wrong position in cmd redraw',
             invalidStrings: 'Command %s have unclosed strings',
@@ -4827,12 +6262,96 @@
             }
         }
         // ---------------------------------------------------------------------
+        // :: helper function that use option to render objects
+        // ---------------------------------------------------------------------
+        function preprocess_value(value) {
+            if (is_function(settings.renderHandler)) {
+                var ret = settings.renderHandler.call(self, value, self);
+                if (ret === false) {
+                    return false;
+                }
+                if (typeof ret === 'string' || is_node(ret) || is_promise(ret)) {
+                    return ret;
+                } else {
+                    return value;
+                }
+            }
+            return value;
+        }
+        // ---------------------------------------------------------------------
+        // :: call when line is out of view when outputLimit is used
+        // :: NOTE: it's not called when less plugin is used onClear is called
+        // :: instead because less call term::clear() after export old view
+        // ---------------------------------------------------------------------
+        function unmount(node) {
+            var index = node.data('index');
+            var line = lines[index];
+            var options = line[1];
+            if (is_function(options.unmount)) {
+                options.unmount.call(self, node);
+            }
+        }
+        // ---------------------------------------------------------------------
+        // :: helper function used in render and in update
+        // ---------------------------------------------------------------------
+        function prepare_render(value, options) {
+            if (is_node(value)) {
+                var settings = $.extend({}, options, {
+                    raw: true,
+                    finalize: function(div) {
+                        var node;
+                        if (value instanceof $.fn.init) {
+                            // deep clone with events - we clone because remove
+                            // from DOM will remove events from original object
+                            node = value.clone(true, true);
+                        } else {
+                            // don't clone html nodes because it will not
+                            // work for canvas or video tag
+                            node = value;
+                        }
+                        div.find('.terminal-render-item').replaceWith(node);
+                        if (options && is_function(options.finalize)) {
+                            options.finalize(div, self);
+                        }
+                    }
+                });
+                return ['<div class="terminal-render-item"/>', settings];
+            }
+        }
+        // ---------------------------------------------------------------------
+        // :: helper function that renders DOM nodes and jQuery objects
+        // ---------------------------------------------------------------------
+        function render(value, options) {
+            var ret = prepare_render(value, options);
+            if (ret) {
+                self.echo.apply(self, ret);
+                return true;
+            }
+        }
+        // ---------------------------------------------------------------------
+        function get_node(index) {
+            return output.find('[data-index=' + index + ']');
+        }
+        // ---------------------------------------------------------------------
+        // :: test if object can be rendered
+        // ---------------------------------------------------------------------
+        function is_node(object) {
+            return object instanceof $.fn.init || object instanceof Element;
+        }
+        // ---------------------------------------------------------------------
         // :: Display object on terminal
         // ---------------------------------------------------------------------
         function display_object(object) {
+            object = preprocess_value(object);
+            if (object === false) {
+                return;
+            }
+            if (render(object)) {
+                return;
+            }
             if (typeof object === 'string') {
                 self.echo(object);
-            } else if (object instanceof Array) {
+            } else if (is_array(object)) {
                 self.echo($.map(object, function(object) {
                     return JSON.stringify(object);
                 }).join(' '));
@@ -4842,8 +6361,10 @@
                 self.echo(object);
             }
         }
-        // Display line code in the file if line numbers are present
-        function print_line(url_spec) {
+        // ---------------------------------------------------------------------
+        // :: Display line code in the file if line numbers are present
+        // ---------------------------------------------------------------------
+        function print_line(url_spec, cols) {
             var re = /(.*):([0-9]+):([0-9]+)$/;
             // google chrome have line and column after filename
             var m = url_spec.match(re);
@@ -4852,16 +6373,25 @@
                 self.pause(settings.softPause);
                 $.get(m[1], function(response) {
                     var file = m[1];
-                    self.echo('[[b;white;]' + file + ']');
                     var code = response.split('\n');
                     var n = +m[2] - 1;
-                    self.echo(code.slice(n - 2, n + 3).map(function(line, i) {
-                        if (i === 2) {
+                    var start = n > 2 ? n - 2 : 0;
+                    var lines = code.slice(start, n + 3).map(function(line, i) {
+                        var prefix = '[' + (n + i - 1) + ']: ';
+                        var limit = cols - prefix.length - 4;
+                        if (line.length > limit) {
+                            line = line.substring(0, limit) + '...';
+                        }
+                        if (n > 2 ? i === 2 : i === n) {
                             line = '[[;#f00;]' +
                                 $.terminal.escape_brackets(line) + ']';
                         }
-                        return '[' + (n + i - 1) + ']: ' + line;
-                    }).join('\n')).resume();
+                        return prefix + line;
+                    }).filter(Boolean).join('\n');
+                    if (lines.length) {
+                        self.echo('[[b;white;]' + file + ']');
+                        self.echo(lines).resume();
+                    }
                 }, 'text');
             }
         }
@@ -4976,16 +6506,6 @@
                     return;
                     // throw e; // this will show stack in other try..catch
                 }
-                /*
-                if (login) {
-                    var token = self.token(true);
-                    if (token) {
-                        command.args = [token].concat(command.args);
-                    } else {
-                        terminal.error('&#91;AUTH&#93; ' + strings.noTokenError);
-                        return;
-                    }
-                }*/
                 var val = object[command.name];
                 var type = get_type(val);
                 if (type === 'function') {
@@ -5038,6 +6558,8 @@
             }
         }
         // ---------------------------------------------------------------------
+        // :: function create interpreter object based on JSON-RPC meta data
+        // ---------------------------------------------------------------------
         function make_json_rpc_object(url, auth, success) {
             function jrpc_success(json) {
                 if (json.error) {
@@ -5067,7 +6589,7 @@
                 var procs = response;
                 // we check if it's false before we call this function but
                 // it don't hurt to be explicit here
-                if (settings.describe !== '') {
+                if (settings.describe !== false && settings.describe !== '') {
                     settings.describe.split('.').forEach(function(field) {
                         procs = procs[field];
                     });
@@ -5118,7 +6640,7 @@
                     var login = typeof auth === 'string' ? auth : 'login';
                     interpreter_object.help = interpreter_object.help || function(fn) {
                         if (typeof fn === 'undefined') {
-                            var names = response.procs.map(function(proc) {
+                            var names = procs.map(function(proc) {
                                 return proc.name;
                             }).join(', ') + ', help';
                             self.echo('Available commands: ' + names);
@@ -5172,6 +6694,9 @@
                 }
             });
         }
+        // ---------------------------------------------------------------------
+        // :: function create interpeter function and call finalize with
+        // :: interpreter and optional completion
         // ---------------------------------------------------------------------
         function make_interpreter(user_intrp, login, finalize) {
             finalize = finalize || $.noop;
@@ -5233,13 +6758,13 @@
                             object,
                             false,
                             login,
-                            fn_interpreter.bind(self)
+                            fn_interpreter && fn_interpreter.bind(self)
                         ),
                         completion: Object.keys(object)
                     });
                 });
             } else if (type === 'string') {
-                if (settings.ignoreSystemDescribe) {
+                if (settings.describe === false) {
                     object = {
                         interpreter: make_basic_json_rpc(user_intrp, login)
                     };
@@ -5353,47 +6878,54 @@
         // ---------------------------------------------------------------------
         var output_buffer = [];
         var NEW_LINE = 1;
-        function buffer_line(string, index, options) {
+        var format_cache;
+        if ('Map' in root) {
+            format_cache = new Map();
+        }
+        function buffer_line(arg, index, options) {
             // urls should always have formatting to keep url if split
             var i, len;
             output_buffer.push(NEW_LINE);
-            if (string === '') {
-                // ignore empty string, it can happen if line was a function
-                // that returned empty string in this case whe need to add container
-                // because on update/resize it can return content
-            } else if (!options.raw) {
-                var format_options = {
-                    linksNoReferrer: settings.linksNoReferrer,
-                    linksNoFollow: settings.linksNoFollow,
-                    anyLinks: settings.anyLinks,
-                    char_width: char_size.width
-                };
-                var cols = self.cols();
-                if ((strlen(string) > cols ||
-                     string.match(/\n/)) &&
-                    ((settings.wrap === true && options.wrap === undefined) ||
-                     settings.wrap === false && options.wrap === true)) {
-                    var words = options.keepWords;
-                    var array = $.terminal.split_equal(string, cols, words);
-                    for (i = 0, len = array.length; i < len; ++i) {
-                        if (array[i] === '' || array[i] === '\r') {
-                            output_buffer.push('<span></span>');
-                        } else {
-                            output_buffer.push($.terminal.format(
-                                array[i],
-                                format_options
-                            ));
-                        }
+            var format_options = {
+                linksNoReferrer: settings.linksNoReferrer,
+                linksNoFollow: settings.linksNoFollow,
+                anyLinks: settings.anyLinks,
+                char_width: char_size.width,
+                escape: false,
+                allowedAttributes: options.allowedAttributes || []
+            };
+            var use_cache = settings.useCache && format_cache;
+            function format_buff(arg, newline) {
+                var args = JSON.stringify([arg, format_options]);
+                if (use_cache) {
+                    if (format_cache.has(args)) {
+                        return format_cache.get(args);
                     }
-                } else {
-                    string = $.terminal.normalize(string);
-                    string = $.terminal.format(string, format_options);
-                    string.split(/\n/).forEach(function(string) {
-                        output_buffer.push(string);
-                    });
                 }
+                var data = {
+                    line: $.terminal.format(
+                        arg,
+                        format_options
+                    ),
+                    newline: newline
+                };
+                if (use_cache) {
+                    format_cache.set(args, data);
+                }
+                return data;
+            }
+            if (arg instanceof Array) {
+                for (i = 0, len = arg.length; i < len; ++i) {
+                    if (arg[i] === '' || arg[i] === '\r') {
+                        output_buffer.push({line: '<span></span>'});
+                    } else {
+                        output_buffer.push(format_buff(arg[i], i === len - 1));
+                    }
+                }
+            } else if (!options.raw) {
+                output_buffer.push(format_buff(arg));
             } else {
-                output_buffer.push(string);
+                output_buffer.push({line: arg});
             }
             output_buffer.push({
                 finalize: options.finalize,
@@ -5401,52 +6933,93 @@
             });
         }
         // ---------------------------------------------------------------------
+        function links(string) {
+            function format(_, style, color, background, _class, data, text) {
+                function formatting(s, text) {
+                    return '[[' + [
+                        style + (s || ''),
+                        color,
+                        background,
+                        _class,
+                        text || data
+                    ].join(';') + ']';
+                }
+                function escaped(_) {
+                    return ']' + formatting('!', _) + _ + ']' + formatting();
+                }
+                if (!style.match(/!/)) {
+                    var m = text.match(email_full_re) || text.match(url_full_re);
+                    if (m) {
+                        return formatting('!', m[1]) + text + ']';
+                    } else if (text.match(email_re) || text.match(url_nf_re)) {
+                        var output = text.replace(email_re, escaped)
+                            .replace(url_nf_re, escaped);
+                        return formatting('', data) + output + ']';
+                    }
+                }
+                return _;
+            }
+            if (!$.terminal.have_formatting(string)) {
+                return string.replace(email_re, '[[!;;]$1]').
+                    replace(url_nf_re, '[[!;;]$1]');
+            }
+            return $.terminal.format_split(string).map(function(str) {
+                if ($.terminal.is_formatting(str)) {
+                    return str.replace(format_parts_re, format);
+                } else {
+                    return str.replace(email_re, '[[!;;]$1]').
+                        replace(url_nf_re, '[[!;;]$1]');
+                }
+            }).join('');
+        }
+        // ---------------------------------------------------------------------
+        function should_wrap(string, options) {
+            return (strlen(text(string)) > options.cols ||
+                    string.match(/\n/)) &&
+                ((settings.wrap === true &&
+                  options.wrap === undefined) ||
+                 settings.wrap === false &&
+                 options.wrap === true);
+        }
+        // ---------------------------------------------------------------------
+        var string_cache;
+        if ('Map' in root) {
+            string_cache = new Map();
+        }
         function process_line(line) {
             // prevent exception in display exception
             try {
                 var line_settings = $.extend({
                     exec: true,
                     raw: false,
-                    finalize: $.noop
+                    finalize: $.noop,
+                    invokeMethods: false,
+                    formatters: true,
+                    convertLinks: settings.convertLinks
                 }, line.options || {});
                 var string;
-                var arg = line.string;
-                var is_fn = is_function(arg);
-                if (is_fn) {
-                    arg = arg();
-                }
-                if (get_type(arg) !== 'string') {
-                    if (is_function(settings.parseObject)) {
-                        var ret = settings.parseObject(arg);
-                        if (get_type(ret) === 'string') {
-                            string = ret;
-                        }
-                    } else if (arg instanceof Array) {
-                        string = $.terminal.columns(arg, self.cols(), settings.tabs);
-                    } else {
-                        string = String(arg);
-                    }
-                } else {
-                    string = arg;
-                }
+                string = stringify_value(line.value);
                 if (string !== '') {
-                    // string can be empty after removing extended commands
-                    if (string !== '') {
-                        if (!line_settings.raw) {
-                            if (settings.convertLinks) {
-                                string = string.replace(email_re, '[[!;;]$1]').
-                                    replace(url_nf_re, '[[!;;]$1]');
+                    if (!line_settings.raw) {
+                        if (line_settings.formatters) {
+                            try {
+                                string = $.terminal.apply_formatters(
+                                    string,
+                                    settings
+                                );
+                            } catch (e) {
+                                display_exception(e, 'FORMATTING');
                             }
-                            if (line_settings.formatters) {
-                                try {
-                                    string = $.terminal.apply_formatters(
-                                        string,
-                                        settings
-                                    );
-                                } catch (e) {
-                                    display_exception(e, 'FORMATTING');
-                                }
+                        }
+                        if (settings.useCache) {
+                            var key = string;
+                            if (string_cache && string_cache.has(key)) {
+                                string = string_cache.get(key);
+                                buffer_line(string, line.index, line_settings);
+                                return;
                             }
+                        }
+                        if (line_settings.exec) {
                             var parts = string.split(format_exec_re);
                             string = $.map(parts, function(string) {
                                 if (string && string.match(format_exec_re) &&
@@ -5455,15 +7028,14 @@
                                     // and lines variable have all extended commands
                                     string = string.replace(/^\[\[|\]\]$/g, '');
                                     if (line_settings.exec) {
-                                        var prev_cmd;
-                                        if (prev_command) {
-                                            prev_command = prev_command.command.trim();
-                                        }
-                                        if (prev_cmd === string.trim()) {
-                                            self.error(strings().recursiveCall);
+                                        var trim = string.trim();
+                                        if (prev_exec_cmd && prev_exec_cmd === trim) {
+                                            prev_exec_cmd = '';
+                                            self.error(strings().recursiveLoop);
                                         } else {
+                                            prev_exec_cmd = trim;
                                             $.terminal.extended_command(self, string, {
-                                                invokeMethods: settings.invokeMethods
+                                                invokeMethods: line_settings.invokeMethods
                                             });
                                         }
                                     }
@@ -5472,21 +7044,33 @@
                                     return string;
                                 }
                             }).join('');
-                            if (string !== '') {
-                                string = crlf($.terminal.normalize(string));
-                                string = $.terminal.encode(string, {
-                                    tabs: settings.tabs
-                                });
-                            }
                         }
-                        if (string !== '') {
-                            buffer_line(string, line.index, line_settings);
+                        if (string === '') {
+                            return;
+                        }
+                        if (line_settings.convertLinks) {
+                            string = links(string);
+                        }
+                        string = crlf($.terminal.normalize(string));
+                        string = $.terminal.encode(string, {
+                            tabs: settings.tabs
+                        });
+                        //string = $.terminal.normalize(string);
+                        var array;
+                        var cols = line_settings.cols = self.cols();
+                        if (should_wrap(string, line_settings)) {
+                            var words = line_settings.keepWords;
+                            array = $.terminal.split_equal(string, cols, words);
+                        } else if (string.match(/\n/)) {
+                            array = string.split(/\n/);
                         }
                     }
                 }
-                if (string === '' && is_fn) {
-                    buffer_line(string, line.index, line_settings);
+                var arg = array || string;
+                if (string_cache && key) {
+                    string_cache.set(key, arg);
                 }
+                buffer_line(arg, line.index, line_settings);
             } catch (e) {
                 output_buffer = [];
                 // don't display exception if exception throw in terminal
@@ -5525,25 +7109,20 @@
                     limit = settings.outputLimit;
                 }
                 lines.forEach(function(line, index) {
-                    var string = line[0];
+                    var value = line[0];
                     var options = line[1];
-                    if (get_type(string) === 'function') {
-                        string = string();
-                    }
-                    if (get_type(string) !== 'string') {
-                        string = String(string);
-                    }
                     lines_to_show.push({
-                        string: string,
+                        value: value,
                         index: index,
                         options: options
                     });
                 });
-                lines_to_show = lines_to_show.slice(lines_to_show.length - limit - 1);
+                var pivot = lines_to_show.length - limit - 1;
+                lines_to_show = lines_to_show.slice(pivot);
             } else {
                 lines_to_show = lines.map(function(line, index) {
                     return {
-                        string: line[0],
+                        value: line[0],
                         index: index,
                         options: line[1]
                     };
@@ -5558,12 +7137,7 @@
                     command_line.before(detached_output); // reinsert output
                 }
                 self.flush(options);
-                try {
-                    settings.onAfterRedraw.call(self, self);
-                } catch (e) {
-                    settings.onAfterRedraw = $.noop;
-                    display_exception(e, 'onAfterRedraw');
-                }
+                fire_event('onAfterRedraw');
             } catch (e) {
                 if (is_function(settings.exceptionHandler)) {
                     settings.exceptionHandler.call(self, e, 'TERMINAL (redraw)');
@@ -5594,6 +7168,7 @@
                     parents.each(function() {
                         var $self = $(this);
                         if ($self.is(':empty')) {
+                            unmount($self);
                             // there can be divs inside parent that
                             // was not removed
                             $self.remove();
@@ -5615,7 +7190,12 @@
                     self.echo(settings.greetings);
                 } else if (type === 'function') {
                     try {
-                        settings.greetings.call(self, self.echo);
+                        var ret = settings.greetings.call(self, self.echo);
+                        var error = make_label_error('Greetings');
+                        unpromise(ret, self.echo, function(e) {
+                            error(e);
+                            settings.greetings = null;
+                        });
                     } catch (e) {
                         settings.greetings = null;
                         display_exception(e, 'greetings');
@@ -5632,6 +7212,7 @@
             if (typeof command === 'undefined') {
                 command = self.get_command();
             }
+            // true will return last rendered string
             var prompt = command_line.prompt(true);
             var mask = command_line.mask();
             switch (typeof mask) {
@@ -5647,38 +7228,17 @@
                     break;
             }
             var options = {
+                convertLinks: false,
+                exec: false,
                 finalize: function finalize(div) {
-                    a11y_hide(div.addClass('command'));
-                    try {
-                        settings.onEchoCommand.call(self, div, command);
-                    } catch (e) {
-                        settings.onEchoCommand = $.noop;
-                        self.exception(e);
-                    }
+                    a11y_hide(div.addClass('terminal-command'));
+                    fire_event('onEchoCommand', [div, command]);
                 }
             };
-            if (is_function(prompt)) {
-                var ret = prompt(function(string) {
-                    self.echo(string + command, options);
-                });
-                if (ret && is_function(ret.then)) {
-                    ret.then(function(string) {
-                        if (typeof string === 'string') {
-                            self.echo(string + command, options);
-                        }
-                    });
-                }
-            } else {
-                self.echo(prompt + command, options);
-            }
+            self.echo(prompt + command, options);
         }
         // ---------------------------------------------------------------------
         function have_scrollbar() {
-            if (self.is('body')) {
-                // source: https://stackoverflow.com/a/6639405/387194
-                // from comment by Šime Vidas
-                return window.innerWidth - document.documentElement.clientWidth > 0;
-            }
             return fill.outerWidth() !== self.outerWidth();
         }
         // ---------------------------------------------------------------------
@@ -5707,6 +7267,12 @@
             /*if (spec[3].length) {
                 restore_state(spec[3]);
             }*/
+        }
+        // ---------------------------------------------------------------------
+        function make_label_error(label) {
+            return function(e) {
+                self.error('[' + label + '] ' + (e.message || e)).resume();
+            };
         }
         // ---------------------------------------------------------------------
         // :: Helper function
@@ -5749,9 +7315,7 @@
                     change_hash = saved_change_hash;
                 }
                 deferred.resolve();
-                if (is_function(settings.onAfterCommand)) {
-                    settings.onAfterCommand.call(self, self, command);
-                }
+                fire_event('onAfterCommand', [command]);
             }
             // -----------------------------------------------------------------
             function show(result) {
@@ -5762,17 +7326,24 @@
                 self.resume();
             }
             // -----------------------------------------------------------------
+
+            // -----------------------------------------------------------------
             function invoke() {
                 // Call user interpreter function
                 var result = interpreter.interpreter.call(self, command, self);
                 if (result) {
                     // auto pause/resume when user return promises
-                    self.pause(settings.softPause);
+                    // it should not pause when user return promise from read()
+                    if (!force_awake) {
+                        self.pause(settings.softPause);
+                    }
+                    force_awake = false;
+                    var error = make_label_error('Command');
                     // when for native Promise object work only in jQuery 3.x
                     if (is_function(result.done || result.then)) {
-                        (result.done || result.then).call(result, show);
+                        return unpromise(result, show, error);
                     } else {
-                        return $.when(result).done(show);
+                        return $.when(result).done(show).catch(error);
                     }
                 } else if (paused) {
                     resume_callbacks.push(function() {
@@ -5792,12 +7363,12 @@
             }
             try {
                 // this callback can disable commands
-                if (is_function(settings.onBeforeCommand)) {
-                    if (settings.onBeforeCommand.call(self, self, command) === false) {
-                        return;
-                    }
+                if (fire_event('onBeforeCommand', [command]) === false) {
+                    return;
                 }
-                if (!exec) {
+                if (exec) {
+                    prev_exec_cmd = command.trim();
+                } else {
                     prev_command = $.terminal.split_command(command);
                 }
                 if (!ghost()) {
@@ -5862,25 +7433,11 @@
         // :: function is defined. The check for this is in the self.pop method
         // ---------------------------------------------------------------------
         function global_logout() {
-            if (is_function(settings.onBeforeLogout)) {
-                try {
-                    if (settings.onBeforeLogout.call(self, self) === false) {
-                        return;
-                    }
-                } catch (e) {
-                    settings.onBeforeLogout = $.noop;
-                    display_exception(e, 'onBeforeLogout');
-                }
+            if (fire_event('onBeforeLogout', [], true) === false) {
+                return;
             }
             clear_loging_storage();
-            if (is_function(settings.onAfterLogout)) {
-                try {
-                    settings.onAfterLogout.call(self, self);
-                } catch (e) {
-                    settings.onAfterLogout = $.noop;
-                    display_exception(e, 'onAfterlogout');
-                }
-            }
+            fire_event('onAfterlogout', [], true);
             self.login(global_login_fn, true, initialize);
         }
         // ---------------------------------------------------------------------
@@ -5916,21 +7473,16 @@
             }
             var login = self.login_name(true);
             command_line.name(name + (login ? '_' + login : ''));
-            if (interpreter.prompt !== command_line.prompt()) {
+            var prompt = interpreter.prompt;
+            if (is_function(prompt)) {
+                prompt = context_callback_proxy(prompt);
+            }
+            if (prompt !== command_line.prompt()) {
                 if (is_function(interpreter.prompt)) {
-                    command_line.prompt(function(callback) {
-                        var ret = interpreter.prompt.call(self, callback, self);
-                        if (ret && is_function(ret.then)) {
-                            ret.then(function(string) {
-                                if (typeof string === 'string') {
-                                    callback(string);
-                                }
-                            });
-                        }
-                    });
-                } else {
-                    command_line.prompt(interpreter.prompt);
+                    // prevent flicker of old prompt until async prompt finishes
+                    command_line.prompt('');
                 }
+                command_line.prompt(interpreter.prompt);
             }
             if (typeof interpreter.history !== 'undefined') {
                 self.history().toggle(interpreter.history);
@@ -5952,6 +7504,53 @@
             if (!silent && is_function(interpreter.onStart)) {
                 interpreter.onStart.call(self, self);
             }
+        }
+        // ---------------------------------------------------------------------
+        function fire_event(name, args, skip_local) {
+            args = (args || []).concat([self]); // create new array
+            // even can be fired before interpreters is created
+            var top = interpreters && interpreters.top();
+            if (top && is_function(top[name]) && !skip_local) {
+                try {
+                    return top[name].apply(self, args);
+                } catch (e) {
+                    delete top[name];
+                    display_exception(e, name);
+                }
+            } else if (is_function(settings[name])) {
+                try {
+                    return settings[name].apply(self, args);
+                } catch (e) {
+                    settings[name] = null;
+                    display_exception(e, name);
+                }
+            }
+        }
+        var scroll_to_view = (function() {
+            function scroll_to_view(visible) {
+                if (!visible) {
+                    // try catch for Node.js unit tests
+                    try {
+                        self.scroll_to(self.find('.cmd-cursor'));
+                        return true;
+                    } catch (e) {
+                        return true;
+                    }
+                }
+            }
+            // we don't want debounce in Unit Tests
+            if (typeof global !== 'undefined' && typeof global.it === 'function') {
+                return scroll_to_view;
+            }
+            return debounce(scroll_to_view, 100, {
+                leading: true,
+                trailing: false
+            });
+        })();
+        // ---------------------------------------------------------------------
+        function make_cursor_visible() {
+            var cursor = self.find('.cmd-cursor-line');
+            return cursor.is_fully_in_viewport(self).then(scroll_to_view);
         }
         // ---------------------------------------------------------------------
         function hashchange() {
@@ -5999,7 +7598,7 @@
                         // resume login if user didn't call pause in onInit
                         // if user pause in onInit wait with exec until it
                         // resume
-                        self.resume();
+                        self.resume(true);
                     }
                 }
             }
@@ -6049,14 +7648,20 @@
                 return false;
             },
             'CTRL+C': function() {
-                if (get_selected_text() === '') {
-                    var command = self.get_command();
-                    var position = self.get_position();
-                    command = command.substring(0, position) + '^C' +
-                        command.substring(position + 2);
-                    echo_command(command);
-                    self.set_command('');
-                }
+                with_selection(function(html) {
+                    if (html === '') {
+                        var command = self.get_command();
+                        var position = self.get_position();
+                        command = command.slice(0, position) + '^C' +
+                            command.slice(position + 2);
+                        echo_command(command);
+                        self.set_command('');
+                    } else {
+                        var clip = self.find('textarea');
+                        text_to_clipboard(clip, process_selected_html(html));
+                    }
+                });
+                return false;
             },
             'CTRL+L': function() {
                 self.clear();
@@ -6082,11 +7687,23 @@
                     completion = settings.completion;
                 }
                 function resolve(commands) {
+                    // local copy
+                    commands = commands.slice();
+                    // default commands should not match for arguments
+                    if (!self.before_cursor(false).match(/\s/)) {
+                        if (settings.clear && $.inArray('clear', commands) === -1) {
+                            commands.push('clear');
+                        }
+                        if (settings.exit && $.inArray('exit', commands) === -1) {
+                            commands.push('exit');
+                        }
+                    }
                     self.complete(commands, {
                         echo: true,
                         word: settings.wordAutocomplete,
                         escape: settings.completionEscape,
                         caseSensitive: caseSensitive,
+                        echoCommand: settings.doubleTabEchoCommand,
                         doubleTab: settings.doubleTab
                     });
                 }
@@ -6100,9 +7717,7 @@
                                 return false;
                             }
                             var result = completion.call(self, string, resolve);
-                            if (result && is_function(result.then)) {
-                                result.then(resolve);
-                            }
+                            unpromise(result, resolve, make_label_error('Completion'));
                             break;
                         case 'array':
                             resolve(completion);
@@ -6135,6 +7750,7 @@
                 self.scroll(-self.height());
             }
         };
+        // ---------------------------------------------------------------------
         function key_down(e) {
             // Prevent to be executed by cmd: CTRL+D, TAB, CTRL+TAB (if more
             // then one terminal)
@@ -6225,58 +7841,22 @@
                 );
             });
         }
-        // terminal already exists
-        if (self.data('terminal')) {
+        var body_terminal;
+        if (self.is('body,html')) {
+            // terminal already exists on body
+            if (self.hasClass('full-screen-terminal')) {
+                var data = self.find('> .terminal').data('terminal');
+                if (data) {
+                    return data;
+                }
+            }
+            body_terminal = self;
+            self = $('<div/>').appendTo('body');
+            $('body').addClass('full-screen-terminal');
+        } else if (self.data('terminal')) {
+            // terminal already exists
             return self.data('terminal');
         }
-        if (self.length === 0) {
-            var msg = sprintf(strings().invalidSelector);
-            throw new $.terminal.Exception(msg);
-        }
-        // var names = []; // stack if interpreter names
-        var scroll_object;
-        var prev_command; // used for name on the terminal if not defined
-        var tab_count = 0; // for tab completion
-        var output; // .terminal-output jquery object
-        var terminal_id = terminals.length();
-        var num_chars; // numer of chars in line
-        var num_rows; // number of lines that fit without scrollbar
-        var command; // for tab completion
-        var logins = new Stack(); // stack of logins
-        var command_queue = new DelayQueue();
-        var init_queue = new DelayQueue();
-        var when_ready = ready(init_queue);
-        var char_size = get_char_size(self);
-        var cmd_ready = ready(command_queue);
-        var in_login = false;// some Methods should not be called when login
-        // TODO: Try to use mutex like counter for pause/resume
-        var onPause = $.noop;// used to indicate that user call pause onInit
-        var old_width, old_height;
-        var delayed_commands = []; // used when exec commands while paused
-        var settings = $.extend(
-            {},
-            $.terminal.defaults,
-            {
-                name: self.selector,
-                exit: !!(options && options.login || !options)
-            },
-            options || {}
-        );
-        // so it's the same as in TypeScript definition for options
-        delete settings.formatters;
-        // used to throw error when calling methods on destroyed terminal
-        var defunct = false;
-        var lines = [];
-        var storage = new StorageHelper(settings.memory);
-        var enabled = settings.enabled;
-        var frozen = false;
-        var paused = false;
-        var autologin = true; // set to false if onBeforeLogin return false
-        var interpreters;
-        var command_line;
-        var old_enabled;
-        var visibility_observer;
-        var mutation_observer;
         // -----------------------------------------------------------------
         // TERMINAL METHODS
         // -----------------------------------------------------------------
@@ -6288,14 +7868,17 @@
             // :: Clear the output
             // -------------------------------------------------------------
             clear: function() {
-                output.html('');
-                lines = [];
-                try {
-                    settings.onClear.call(self, self);
-                } catch (e) {
-                    display_exception(e, 'onClear');
+                if (fire_event('onClear') !== false) {
+                    lines.forEach(function(line, i) {
+                        var options = line[1];
+                        if (is_function(options.onClear)) {
+                            options.onClear.call(self, get_node(i));
+                        }
+                    });
+                    lines = [];
+                    output[0].innerHTML = '';
+                    self.prop({scrollTop: 0});
                 }
-                self.attr({scrollTop: 0});
                 return self;
             },
             // -------------------------------------------------------------
@@ -6303,14 +7886,8 @@
             // :: restore the state
             // -------------------------------------------------------------
             export_view: function() {
-                var user_export = {};
-                if (is_function(settings.onExport)) {
-                    try {
-                        user_export = settings.onExport.call(self);
-                    } catch (e) {
-                        display_exception(e, 'onExport');
-                    }
-                }
+                var user_export = fire_event('onExport');
+                user_export = user_export || {};
                 return $.extend({}, {
                     focus: enabled,
                     mask: command_line.mask(),
@@ -6329,14 +7906,7 @@
                 if (in_login) {
                     throw new Error(sprintf(strings().notWhileLogin, 'import_view'));
                 }
-                if (is_function(settings.onImport)) {
-                    try {
-                        settings.onImport.call(self, view);
-                    } catch (e) {
-                        settings.onImport = $.noop;
-                        display_exception(e, 'onImport');
-                    }
-                }
+                fire_event('onImport', [view]);
                 when_ready(function ready() {
                     self.set_prompt(view.prompt);
                     self.set_command(view.command);
@@ -6408,11 +7978,11 @@
                         // it will resolve exec promise when user promise
                         // is resolved
                         var ret = commands(command, silent, true);
-                        if (ret && (ret.done || ret.then)) {
-                            (ret.done || ret.then).call(ret, function() {
-                                d.resolve(self);
-                            });
-                        }
+                        unpromise(ret, function() {
+                            d.resolve();
+                        }, function() {
+                            d.reject();
+                        });
                     }
                 });
                 // while testing it didn't executed last exec when using this
@@ -6456,20 +8026,27 @@
                 if (settings.history) {
                     command_line.history().disable();
                 }
+                function popUserPass() {
+                    while (self.level() > level) {
+                        self.pop(undefined, true);
+                    }
+                    if (settings.history) {
+                        command_line.history().enable();
+                    }
+                }
                 // so we know how many times call pop
                 var level = self.level();
                 function login_callback(user, token, silent) {
+                    if (self.paused()) {
+                        self.resume();
+                    }
                     if (token) {
-                        while (self.level() > level) {
-                            self.pop(undefined, true);
-                        }
-                        if (settings.history) {
-                            command_line.history().enable();
-                        }
+                        popUserPass();
                         var name = self.prefix_name(true) + '_';
                         storage.set(name + 'token', token);
                         storage.set(name + 'login', user);
                         in_login = false;
+                        fire_event('onAfterLogin', [user, token]);
                         if (is_function(success)) {
                             // will be used internaly since users know
                             // when login success (they decide when
@@ -6498,21 +8075,27 @@
                     self.off('terminal.autologin');
                 }
                 self.on('terminal.autologin', function(event, user, token, silent) {
+                    if (fire_event('onBeforeLogin', [user, token]) === false) {
+                        return;
+                    }
                     login_callback(user, token, silent);
                 });
                 self.push(function(user) {
                     self.set_mask(settings.maskChar).push(function(pass) {
                         try {
+                            if (fire_event('onBeforeLogin', [user, pass]) === false) {
+                                popUserPass();
+                                return;
+                            }
+                            self.pause();
                             var ret = auth.call(self, user, pass, function(
                                 token,
                                 silent) {
                                 login_callback(user, token, silent);
                             });
-                            if (ret && is_function(ret.then)) {
-                                self.pause();
-                                ret.then(function(token) {
+                            if (ret && is_function(ret.then || ret.done)) {
+                                (ret.then || ret.done).call(ret, function(token) {
                                     login_callback(user, token);
-                                    self.resume();
                                 });
                             }
                         } catch (e) {
@@ -6539,7 +8122,7 @@
             // -------------------------------------------------------------
             before_cursor: function(word) {
                 var pos = command_line.position();
-                var command = command_line.get().substring(0, pos);
+                var command = command_line.get().slice(0, pos);
                 var cmd_strings = command.split(' ');
                 var string; // string before cursor that will be completed
                 if (word) {
@@ -6582,6 +8165,7 @@
                     word: true,
                     echo: false,
                     escape: true,
+                    echoCommand: false,
                     caseSensitive: true,
                     doubleTab: null
                 }, options || {});
@@ -6599,14 +8183,6 @@
                     if (quote) {
                         string = string.replace(/^["']/, '');
                     }
-                }
-                // local copy
-                commands = commands.slice();
-                if (settings.clear && $.inArray('clear', commands) === -1) {
-                    commands.push('clear');
-                }
-                if (settings.exit && $.inArray('exit', commands) === -1) {
-                    commands.push('exit');
                 }
                 if (tab_count % 2 === 0) {
                     command = self.before_cursor(options.word);
@@ -6627,17 +8203,25 @@
                         }
                     });
                 }
+                function escape(string) {
+                    if (quote === '"') {
+                        string = string.replace(/"/g, '\\"');
+                    }
+                    if (!quote && options.escape) {
+                        string = string.replace(/(["'() ])/g, '\\$1');
+                    }
+                    return string;
+                }
                 function matched_strings() {
                     var matched = [];
                     for (var i = commands.length; i--;) {
+                        if (commands[i].match(/\n/) && options.word) {
+                            warn('If you use commands with newlines you ' +
+                                 'should use word option for complete or' +
+                                 ' wordAutocomplete terminal option');
+                        }
                         if (regex.test(commands[i])) {
-                            var match = commands[i];
-                            if (quote === '"') {
-                                match = match.replace(/"/g, '\\"');
-                            }
-                            if (!quote && options.escape) {
-                                match = match.replace(/(["'() ])/g, '\\$1');
-                            }
+                            var match = escape(commands[i]);
                             if (!sensitive && same_case(match)) {
                                 if (string.toLowerCase() === string) {
                                     match = match.toLowerCase();
@@ -6657,8 +8241,8 @@
                     var text = self.get_command();
                     var pos = self.get_position();
                     var re = new RegExp('^' + input, 'i');
-                    var pre = text.substring(0, pos);
-                    var post = text.substring(pos);
+                    var pre = text.slice(0, pos);
+                    var post = text.slice(pos);
                     var to_insert = replacement.replace(re, '') + (quote || '');
                     self.set_command(pre + to_insert + post);
                     self.set_position((pre + to_insert).length);
@@ -6676,6 +8260,10 @@
                         tab_count = 0;
                         if (options.echo) {
                             if (is_function(options.doubleTab)) {
+                                // new API old is keep for backward compatibility
+                                if (options.echoCommand) {
+                                    echo_command();
+                                }
                                 var ret = options.doubleTab.call(
                                     self,
                                     string,
@@ -6689,7 +8277,7 @@
                                 }
                             } else if (options.doubleTab !== false) {
                                 echo_command();
-                                var text = matched.reverse().join('\t');
+                                var text = matched.slice().reverse().join('\t\t');
                                 self.echo($.terminal.escape_brackets(text), {
                                     keepWords: true,
                                     formatters: false
@@ -6698,9 +8286,9 @@
                             return true;
                         }
                     } else {
-                        var common = common_string(string, matched, sensitive);
+                        var common = common_string(escape(string), matched, sensitive);
                         if (common) {
-                            replace(string, common);
+                            replace(safe, common);
                             command = self.before_cursor(options.word);
                             return true;
                         }
@@ -6761,24 +8349,22 @@
                     paused = true;
                     command_line.disable(visible || is_android);
                     if (!visible) {
-                        command_line.find('.prompt').hidden();
+                        command_line.find('.cmd-prompt').hidden();
                     }
-                    if (is_function(settings.onPause)) {
-                        settings.onPause.call(self);
-                    }
+                    fire_event('onPause');
                 });
                 return self;
             },
             // -------------------------------------------------------------
             // :: Resume the previously paused terminal
             // -------------------------------------------------------------
-            resume: function() {
+            resume: function(silent) {
                 cmd_ready(function ready() {
                     paused = false;
                     if (enabled && terminals.front() === self) {
-                        command_line.enable(true);
+                        command_line.enable(silent);
                     }
-                    command_line.find('.prompt').visible();
+                    command_line.find('.cmd-prompt').visible();
                     var original = delayed_commands;
                     delayed_commands = [];
                     for (var i = 0; i < original.length; ++i) {
@@ -6790,9 +8376,7 @@
                         fn();
                     }
                     self.scroll_to_bottom();
-                    if (is_function(settings.onResume)) {
-                        settings.onResume.call(self);
-                    }
+                    fire_event('onResume');
                 });
                 return self;
             },
@@ -6955,12 +8539,7 @@
                     cmd_ready(function ready() {
                         var ret;
                         if (!silent && !enabled) {
-                            try {
-                                ret = settings.onFocus.call(self, self);
-                            } catch (e) {
-                                settings.onFocus = $.noop;
-                                display_exception(e, 'onFocus');
-                            }
+                            fire_event('onFocus');
                         }
                         if (!silent && ret === undefined || silent) {
                             enabled = true;
@@ -6973,18 +8552,24 @@
                 return self;
             },
             // -------------------------------------------------------------
+            // :: function clear formatting cache if you don't longer need it
+            // :: cache is used if option useCache is set to true
+            // -------------------------------------------------------------
+            clear_cache: 'Map' in root ? function() {
+                format_cache.clear();
+                string_cache.clear();
+                return self;
+            } : function() {
+                return self;
+            },
+            // -------------------------------------------------------------
             // :: Disable the terminal
             // -------------------------------------------------------------
             disable: function(silent) {
                 cmd_ready(function ready() {
                     var ret;
                     if (!silent && enabled) {
-                        try {
-                            ret = settings.onBlur.call(self, self);
-                        } catch (e) {
-                            settings.onBlur = $.noop;
-                            display_exception(e, 'onBlur');
-                        }
+                        ret = fire_event('onBlur');
                     }
                     if (!silent && ret === undefined || silent) {
                         enabled = false;
@@ -7005,10 +8590,10 @@
             signature: function() {
                 var cols = self.cols();
                 for (var i = signatures.length; i--;) {
-                    var lenghts = signatures[i].map(function(line) {
+                    var lengths = signatures[i].map(function(line) {
                         return line.length;
                     });
-                    if (Math.max.apply(null, lenghts) <= cols) {
+                    if (Math.max.apply(null, lengths) <= cols) {
                         return signatures[i].join('\n') + '\n';
                     }
                 }
@@ -7032,6 +8617,12 @@
             // -------------------------------------------------------------
             get_command: function() {
                 return command_line.get();
+            },
+            // -------------------------------------------------------------
+            // :: echo command and previous prompt (used by echo_newline.js)
+            // -------------------------------------------------------------
+            echo_command: function(command) {
+                return echo_command(command);
             },
             // -------------------------------------------------------------
             // :: Change the command line to the new one
@@ -7146,6 +8737,7 @@
                         typeof settings.numRows !== 'undefined') {
                         command_line.resize(settings.numChars);
                         self.refresh();
+                        fire_event('onResize');
                         return;
                     }
                     var new_num_chars = get_num_chars(self, char_size);
@@ -7157,12 +8749,7 @@
                         num_rows = new_num_rows;
                         command_line.resize(num_chars);
                         self.refresh();
-                        var top = interpreters.top();
-                        if (is_function(top.resize)) {
-                            top.resize.call(self, self);
-                        } else if (is_function(settings.onResize)) {
-                            settings.onResize.call(self, self);
-                        }
+                        fire_event('onResize');
                     }
                 }
                 return self;
@@ -7190,16 +8777,18 @@
                 }, options || {});
                 try {
                     var bottom = self.is_bottom();
+                    output.css('visibilty', 'hidden');
                     var wrapper;
                     // print all lines
                     // var output_buffer = lines.flush();
-                    $.each(output_buffer, function(i, line) {
-                        if (line === NEW_LINE) {
-                            wrapper = $('<div></div>');
-                        } else if ($.isPlainObject(line) && is_function(line.finalize)) {
+                    while (output_buffer.length) {
+                        var data = output_buffer.shift();
+                        if (data === NEW_LINE) {
+                            wrapper = $(document.createElement('div'));
+                        } else if ($.isPlainObject(data) && is_function(data.finalize)) {
                             // this is finalize function from echo
                             if (options.update) {
-                                var selector = '> div[data-index=' + line.index + ']';
+                                var selector = '> div[data-index=' + data.index + ']';
                                 var node = output.find(selector);
                                 if (node.html() !== wrapper.html()) {
                                     node.replaceWith(wrapper);
@@ -7207,53 +8796,73 @@
                             } else {
                                 wrapper.appendTo(output);
                             }
-                            line.finalize(wrapper.attr('data-index', line.index));
+                            wrapper.attr('data-index', data.index);
+                            data.finalize(wrapper);
                         } else {
-                            $('<div/>').html(line)
-                                .appendTo(wrapper).width('100%');
+                            var line = data.line;
+                            var div = document.createElement('div');
+                            div.style.width = '100%';
+                            div.innerHTML = line;
+                            if (data.newline) {
+                                div.className = 'cmd-end-line';
+                            }
+                            wrapper[0].appendChild(div);
                         }
-                    });
-                    limit_lines();
-                    try {
-                        settings.onFlush.call(self, self);
-                    } catch (e) {
-                        settings.onFlush = $.noop;
-                        display_exception(e, 'onFlush');
                     }
-                    //num_rows = get_num_rows(self, char_size);
+                    limit_lines();
+                    output.css('visibilty', '');
+                    fire_event('onFlush');
+                    var offset = self.find('.cmd').offset();
+                    var self_offset = self.offset();
+                    css(self[0], {
+                        '--terminal-x': offset.left - self_offset.left,
+                        '--terminal-y': offset.top - self_offset.top
+                    });
+
                     if ((settings.scrollOnEcho && options.scroll) || bottom) {
                         self.scroll_to_bottom();
                     }
-                    output_buffer = [];
-                } catch (e) {
+                } catch (e1) {
                     if (is_function(settings.exceptionHandler)) {
-                        settings.exceptionHandler.call(self, e, 'TERMINAL (Flush)');
+                        try {
+                            settings.exceptionHandler.call(self, e1, 'TERMINAL (Flush)');
+                        } catch (e2) {
+                            settings.exceptionHandler = $.noop;
+                            alert_exception('[exceptionHandler]', e2);
+                        }
                     } else {
-                        alert_exception('[Flush]', e);
+                        alert_exception('[Flush]', e1);
                     }
+                } finally {
+                    output_buffer = [];
                 }
                 return self;
             },
             // -------------------------------------------------------------
             // :: Update the output line - line number can be negative
             // -------------------------------------------------------------
-            update: function(line, string, options) {
+            update: function(line, value, options) {
                 when_ready(function ready() {
                     if (line < 0) {
                         line = lines.length + line; // yes +
                     }
                     if (!lines[line]) {
                         self.error('Invalid line number ' + line);
-                    } else if (string === null) {
+                    } else if (value === null) {
                         lines.splice(line, 1);
                         output.find('[data-index=' + line + ']').remove();
                     } else {
-                        lines[line][0] = string;
+                        var ret = prepare_render(value, options);
+                        if (ret) {
+                            value = ret[0];
+                            options = ret[1];
+                        }
+                        lines[line][0] = value;
                         if (options) {
                             lines[line][1] = options;
                         }
                         process_line({
-                            string: string,
+                            value: value,
                             index: line,
                             options: options
                         });
@@ -7279,24 +8888,34 @@
                 return lines.length - 1;
             },
             // -------------------------------------------------------------
-            // :: Print data to the terminal output. It can have two options
-            // :: a function that is called with the container div that
-            // :: holds the output (as a jquery object) every time the
-            // :: output is printed (including resize and scrolling)
-            // :: If the line is a function it will be called for every
-            // :: redraw.
-            // :: it use $.when so you can echo a promise
+            // :: Print data to the terminal output. It can have options
+            // :: * flush - indicate that arg should be send to DOM
+            // :: * raw - indicate if it should handle input as html
+            // :: * finalize - function call with container div
+            // :: * keepWords - inform how to wrap text
+            // :: * formatters - inform function if it should use formatters
+            // ::   on input string - good to prevent XSS when you want
+            // ::   advanced server side controling of terminal
+            // :: you can echo: promise, function, strings array or string
             // -------------------------------------------------------------
             echo: function(arg, options) {
+                var arg_defined = arguments.length > 0;
                 function echo(arg) {
                     try {
                         var locals = $.extend({
                             flush: true,
+                            exec: true,
                             raw: settings.raw,
                             finalize: $.noop,
+                            unmount: $.noop,
                             keepWords: false,
-                            formatters: true
+                            invokeMethods: settings.invokeMethods,
+                            onClear: null,
+                            formatters: true,
+                            allowedAttributes: settings.allowedAttributes
                         }, options || {});
+                        // finalize function is passed around and invoked
+                        // in terminal::flush after content is added to DOM
                         (function(finalize) {
                             locals.finalize = function(div) {
                                 if (locals.raw) {
@@ -7304,8 +8923,16 @@
                                 }
                                 try {
                                     if (is_function(finalize)) {
-                                        finalize(div);
+                                        finalize.call(self, div);
                                     }
+                                    div.find('img').each(function() {
+                                        var self = $(this);
+                                        var img = new Image();
+                                        img.onerror = function() {
+                                            self.replaceWith(use_broken_image);
+                                        };
+                                        img.src = this.src;
+                                    });
                                 } catch (e) {
                                     display_exception(e, 'USER:echo(finalize)');
                                     finalize = null;
@@ -7317,24 +8944,44 @@
                             if (output_buffer.length) {
                                 self.flush();
                             }
-                            output_buffer = [];
                         }
+                        if (fire_event('onBeforeEcho', [arg]) === false) {
+                            return;
+                        }
+                        var value;
                         if (typeof arg === 'function') {
-                            arg = arg.bind(self);
+                            value = arg.bind(self);
+                        } else if (typeof arg === 'undefined') {
+                            if (arg_defined) {
+                                value = String(arg);
+                            } else {
+                                value = '';
+                            }
+                        } else {
+                            var ret = preprocess_value(arg);
+                            if (ret === false) {
+                                return self;
+                            }
+                            value = ret;
                         }
-                        process_line({
-                            string: arg,
-                            options: locals,
-                            index: lines.length
+                        unpromise(value, function(value) {
+                            if (render(value, locals)) {
+                                return self;
+                            }
+                            process_line({
+                                value: value,
+                                options: locals,
+                                index: lines.length
+                            });
+                            // extended commands should be processed only
+                            // once in echo and not on redraw
+                            locals.exec = false;
+                            lines.push([value, locals]);
+                            if (locals.flush) {
+                                self.flush();
+                                fire_event('onAfterEcho', [arg]);
+                            }
                         });
-                        // extended commands should be processed only
-                        // once in echo and not on redraw
-                        lines.push([arg, $.extend(locals, {
-                            exec: false
-                        })]);
-                        if (locals.flush) {
-                            self.flush();
-                        }
                     } catch (e) {
                         // if echo throw exception we can't use error to
                         // display that exception
@@ -7346,7 +8993,7 @@
                     }
                 }
                 if (arg !== undefined && is_function(arg.then)) {
-                    $.when(arg).done(echo);
+                    $.when(arg).done(echo).catch(make_label_error('Echo'));
                 } else {
                     echo(arg);
                 }
@@ -7364,8 +9011,8 @@
                     // quick hack to fix trailing backslash
                     var str = $.terminal.escape_brackets(string).
                         replace(/\\$/, '&#92;').
-                        replace(url_re, ']$1[[;;;error]');
-                    return '[[;;;error]' + str + ']';
+                        replace(url_re, ']$1[[;;;terminal-error]');
+                    return '[[;;;terminal-error]' + str + ']';
                 }
                 if (typeof message === 'function') {
                     return self.echo(function() {
@@ -7375,7 +9022,7 @@
                 if (message && message.then) {
                     message.then(function(string) {
                         self.echo(format(string));
-                    });
+                    }).catch(make_label_error('Echo Error'));
                     return self;
                 }
                 return self.echo(format(message), options);
@@ -7391,7 +9038,7 @@
                 if (message) {
                     self.error(message, {
                         finalize: function(div) {
-                            div.addClass('exception message');
+                            div.addClass('terminal-exception terminal-message');
                         },
                         keepWords: true
                     });
@@ -7411,12 +9058,16 @@
                 if (e.stack) {
                     var stack = $.terminal.escape_brackets(e.stack);
                     self.echo(stack.split(/\n/g).map(function(trace) {
-                        return '[[;;;error]' + trace.replace(url_re, function(url) {
-                            return ']' + url + '[[;;;error]';
-                        }) + ']';
+                        // nested formatting will handle urls but that formatting
+                        // can be removed - this code was created before
+                        // that formatting existed (see commit ce01c3f5)
+                        return '[[;;;terminal-error]' +
+                            trace.replace(url_re, function(url) {
+                                return ']' + url + '[[;;;terminal-error]';
+                            }) + ']';
                     }).join('\n'), {
                         finalize: function(div) {
-                            div.addClass('exception stack-trace');
+                            div.addClass('terminal-exception terminal-stack-trace');
                         },
                         formatters: false
                     });
@@ -7429,18 +9080,18 @@
             scroll: function(amount) {
                 var pos;
                 amount = Math.round(amount);
-                if (scroll_object.prop) { // work with jQuery > 1.6
-                    if (amount > scroll_object.prop('scrollTop') && amount > 0) {
-                        scroll_object.prop('scrollTop', 0);
+                if (self.prop) { // work with jQuery > 1.6
+                    if (amount > self.prop('scrollTop') && amount > 0) {
+                        self.prop('scrollTop', 0);
                     }
-                    pos = scroll_object.prop('scrollTop');
-                    scroll_object.scrollTop(pos + amount);
+                    pos = self.prop('scrollTop');
+                    self.scrollTop(pos + amount);
                 } else {
-                    if (amount > scroll_object.attr('scrollTop') && amount > 0) {
-                        scroll_object.attr('scrollTop', 0);
+                    if (amount > self.prop('scrollTop') && amount > 0) {
+                        self.prop('scrollTop', 0);
                     }
-                    pos = scroll_object.attr('scrollTop');
-                    scroll_object.scrollTop(pos + amount);
+                    pos = self.prop('scrollTop');
+                    self.scrollTop(pos + amount);
                 }
                 return self;
             },
@@ -7533,6 +9184,8 @@
             // :: wrapper for common use case
             // -------------------------------------------------------------
             read: function(message, success, cancel) {
+                // return from read() should not pause terminal
+                force_awake = true;
                 var defer = jQuery.Deferred();
                 var read = false;
                 self.push(function(string) {
@@ -7587,7 +9240,7 @@
                     }
                     var was_paused = paused;
                     function init() {
-                        settings.onPush.call(self, top, interpreters.top(), self);
+                        fire_event('onPush', [top, interpreters.top()]);
                         prepare_top_interpreter();
                     }
                     // self.pause();
@@ -7648,17 +9301,10 @@
                     top = interpreters.top();
                     if (settings.login) {
                         if (!silent) {
-                            settings.onPop.call(self, top, null, self);
+                            fire_event('onPop', [top, null]);
                         }
                         global_logout();
-                        if (is_function(settings.onExit)) {
-                            try {
-                                settings.onExit.call(self, self);
-                            } catch (e) {
-                                settings.onExit = $.noop;
-                                display_exception(e, 'onExit');
-                            }
-                        }
+                        fire_event('onExit');
                     } else {
                         self.error(strings().canExitError);
                     }
@@ -7669,8 +9315,10 @@
                     var current = interpreters.pop();
                     top = interpreters.top();
                     prepare_top_interpreter();
+                    // restore mask
+                    self.set_mask(top.mask);
                     if (!silent) {
-                        settings.onPop.call(self, current, top);
+                        fire_event('onPop', [current, top]);
                     }
                     // we check in case if you don't pop from password interpreter
                     if (in_login && self.get_prompt() !== strings().login + ': ') {
@@ -7684,8 +9332,6 @@
                             display_exception(e, 'onExit');
                         }
                     }
-                    // restore mask
-                    self.set_mask(top.mask);
                 }
                 return self;
             },
@@ -7713,26 +9359,7 @@
             // :: invoke keydown shorcut
             // -------------------------------------------------------------
             invoke_key: function(shortcut) {
-                var keys = shortcut.toUpperCase().split('+');
-                var key = keys.pop();
-                var ctrl = keys.indexOf('CTRL') !== -1;
-                var shift = keys.indexOf('SHIFT') !== -1;
-                var alt = keys.indexOf('ALT') !== -1;
-                var meta = keys.indexOf('META') !== -1;
-                var e = $.Event("keydown", {
-                    ctrlKey: ctrl,
-                    shiftKey: shift,
-                    altKey: alt,
-                    metaKey: meta,
-                    which: reversed_keycodes[key],
-                    key: key
-                });
-                var doc = $(document.documentElement || window);
-                doc.trigger(e);
-                e = $.Event("keypress");
-                e.key = key;
-                e.which = e.keyCode = 0;
-                doc.trigger(e);
+                command_line.invoke_key(shortcut);
                 return self;
             },
             // -------------------------------------------------------------
@@ -7820,8 +9447,9 @@
             destroy: function() {
                 when_ready(function ready() {
                     command_line.destroy().remove();
-                    output.remove();
-                    wrapper.remove();
+                    self.resizer('unbind');
+                    self.touch_scroll('unbind');
+                    font_resizer.resizer('unbind').remove();
                     $(document).unbind('.terminal_' + self.id());
                     $(window).unbind('.terminal_' + self.id());
                     self.unbind('click wheel mousewheel mousedown mouseup');
@@ -7835,7 +9463,7 @@
                     }
                     $(window).off('blur', blur_terminal).
                         off('focus', focus_terminal);
-                    self.find('.terminal-fill').remove();
+                    self.find('.terminal-fill, .terminal-font').remove();
                     self.stopTime();
                     terminals.remove(terminal_id);
                     if (visibility_observer) {
@@ -7845,27 +9473,56 @@
                             clearInterval(visibility_observer);
                         }
                     }
+                    var scroll_marker = self.find('.terminal-scroll-marker');
+                    if (is_bottom_observer) {
+                        visibility_observer.unobserve(scroll_marker[0]);
+                    }
+                    scroll_marker.remove();
                     if (mutation_observer) {
                         mutation_observer.disconnect();
                     }
-                    self.resizer('unbind');
-                    font_resizer.resizer('unbind').remove();
                     if (!terminals.length()) {
                         $(window).off('hashchange');
+                    }
+                    if (is_mobile) {
+                        self.off([
+                            'touchstart.terminal',
+                            'touchmove.terminal',
+                            'touchend.terminal'
+                        ].join(' '));
+                    }
+                    output.remove();
+                    wrapper.remove();
+                    if (body_terminal) {
+                        var $body = $(body_terminal);
+                        if ($body.attr('class') === 'full-screen-terminal') {
+                            $body.removeAttr('class');
+                        } else {
+                            $body.removeClass('full-screen-terminal');
+                        }
+                        self.remove();
                     }
                     defunct = true;
                 });
                 return self;
             },
             // -------------------------------------------------------------
+            // :: ref: https://stackoverflow.com/a/18927969/387194
+            // -------------------------------------------------------------
+            scroll_to: function(elem) {
+                var scroll = self.scrollTop() - self.offset().top + $(elem).offset().top;
+                self.scrollTop(scroll);
+                return self;
+            },
+            // -------------------------------------------------------------
             scroll_to_bottom: function() {
                 var scrollHeight;
-                if (scroll_object.prop) {
-                    scrollHeight = scroll_object.prop('scrollHeight');
+                if (self.prop) {
+                    scrollHeight = self.prop('scrollHeight');
                 } else {
-                    scrollHeight = scroll_object.attr('scrollHeight');
+                    scrollHeight = self.attr('scrollHeight');
                 }
-                scroll_object.scrollTop(scrollHeight);
+                self.scrollTop(scrollHeight);
                 return self;
             },
             // -------------------------------------------------------------
@@ -7875,17 +9532,13 @@
             is_bottom: function() {
                 if (settings.scrollBottomOffset === -1) {
                     return false;
+                } else if (typeof is_bottom_detected === 'boolean') {
+                    return is_bottom_detected;
                 } else {
                     var scroll_height, scroll_top, height;
-                    if (self.is('body')) {
-                        scroll_height = $(document).height();
-                        scroll_top = $(window).scrollTop();
-                        height = window.innerHeight;
-                    } else {
-                        scroll_height = scroll_object[0].scrollHeight;
-                        scroll_top = scroll_object.scrollTop();
-                        height = scroll_object.outerHeight();
-                    }
+                    scroll_height = self[0].scrollHeight;
+                    scroll_top = self[0].scrollTop;
+                    height = self[0].offsetHeight;
                     var limit = scroll_height - settings.scrollBottomOffset;
                     return scroll_top + height > limit;
                 }
@@ -7911,147 +9564,91 @@
                 }
             };
         }));
-        // for invoking shortcuts using terminal::keydown
-        // taken from https://github.com/cvan/keyboardevent-key-polyfill/
-        var keycodes = {
-            3: 'Cancel',
-            6: 'Help',
-            8: 'Backspace',
-            9: 'Tab',
-            12: 'Clear',
-            13: 'Enter',
-            16: 'Shift',
-            17: 'Control',
-            18: 'Alt',
-            19: 'Pause',
-            20: 'CapsLock',
-            27: 'Escape',
-            28: 'Convert',
-            29: 'NonConvert',
-            30: 'Accept',
-            31: 'ModeChange',
-            32: ' ',
-            33: 'PageUp',
-            34: 'PageDown',
-            35: 'End',
-            36: 'Home',
-            37: 'ArrowLeft',
-            38: 'ArrowUp',
-            39: 'ArrowRight',
-            40: 'ArrowDown',
-            41: 'Select',
-            42: 'Print',
-            43: 'Execute',
-            44: 'PrintScreen',
-            45: 'Insert',
-            46: 'Delete',
-            48: ['0', ')'],
-            49: ['1', '!'],
-            50: ['2', '@'],
-            51: ['3', '#'],
-            52: ['4', '$'],
-            53: ['5', '%'],
-            54: ['6', '^'],
-            55: ['7', '&'],
-            56: ['8', '*'],
-            57: ['9', '('],
-            91: 'OS',
-            93: 'ContextMenu',
-            144: 'NumLock',
-            145: 'ScrollLock',
-            181: 'VolumeMute',
-            182: 'VolumeDown',
-            183: 'VolumeUp',
-            186: [';', ':'],
-            187: ['=', '+'],
-            188: [',', '<'],
-            189: ['-', '_'],
-            190: ['.', '>'],
-            191: ['/', '?'],
-            192: ['`', '~'],
-            219: ['[', '{'],
-            220: ['\\', '|'],
-            221: [']', '}'],
-            222: ["'", '"'],
-            224: 'Meta',
-            225: 'AltGraph',
-            246: 'Attn',
-            247: 'CrSel',
-            248: 'ExSel',
-            249: 'EraseEof',
-            250: 'Play',
-            251: 'ZoomOut'
-        };
-        // Function keys (F1-24).
-        for (i = 1; i < 25; i++) {
-            keycodes[111 + i] = 'F' + i;
-        }
-        // Printable ASCII characters.
-        var letter = '';
-        for (i = 65; i < 91; i++) {
-            letter = String.fromCharCode(i);
-            keycodes[i] = [letter.toLowerCase(), letter.toUpperCase()];
-        }
-        var reversed_keycodes = {};
-        Object.keys(keycodes).forEach(function(which) {
-            if (keycodes[which] instanceof Array) {
-                keycodes[which].forEach(function(key) {
-                    reversed_keycodes[key.toUpperCase()] = which;
-                });
-            } else {
-                reversed_keycodes[keycodes[which].toUpperCase()] = which;
-            }
-        });
-
         // -----------------------------------------------------------------
-        // INIT CODE
+        // :: INIT CODE
         // -----------------------------------------------------------------
+        if (self.length === 0) {
+            var msg = sprintf(strings().invalidSelector);
+            throw new $.terminal.Exception(msg);
+        }
+        self.data('terminal', self);
+        // var names = []; // stack if interpreter names
+        var prev_command; // used for name on the terminal if not defined
+        var prev_exec_cmd;
+        var tab_count = 0; // for tab completion
+        var output; // .terminal-output jquery object
+        var terminal_id = terminals.length();
+        var force_awake = false; // flag used to don't pause when user return read() call
+        var num_chars; // numer of chars in line
+        var num_rows; // number of lines that fit without scrollbar
+        var command; // for tab completion
+        var logins = new Stack(); // stack of logins
+        var command_queue = new DelayQueue();
+        var init_queue = new DelayQueue();
+        var when_ready = ready(init_queue);
+        var cmd_ready = ready(command_queue);
+        var is_bottom_detected;
+        var is_bottom_observer;
+        var in_login = false;// some Methods should not be called when login
+        // TODO: Try to use mutex like counter for pause/resume
+        var onPause = $.noop;// used to indicate that user call pause onInit
+        var old_width, old_height;
+        var delayed_commands = []; // used when exec commands while paused
+        var settings = $.extend(
+            {},
+            $.terminal.defaults,
+            {
+                name: self.selector,
+                exit: !!(options && options.login || !options)
+            },
+            options || {}
+        );
+        if (typeof settings.width === 'number') {
+            self.width(settings.width);
+        }
+        if (typeof settings.height === 'number') {
+            self.height(settings.height);
+        }
+        var char_size = get_char_size(self);
+        // so it's the same as in TypeScript definition for options
+        delete settings.formatters;
+        // used to throw error when calling methods on destroyed terminal
+        var defunct = false;
+        var lines = [];
+        var storage = new StorageHelper(settings.memory);
+        var enabled = settings.enabled;
+        var frozen = false;
+        var paused = false;
+        var autologin = true; // set to false if onBeforeLogin return false
+        var interpreters;
+        var command_line;
+        var old_enabled;
+        var visibility_observer;
+        var mutation_observer;
         // backward compatibility
         if (settings.ignoreSystemDescribe === true) {
             settings.describe = false;
-        }
-        if (settings.width) {
-            self.width(settings.width);
-        }
-        if (settings.height) {
-            self.height(settings.height);
-        }
-        // scrollTop need be on html but scrollHeight taken from body
-        // on Safari both on body it's easier to just put both in selector and it works
-        if (settings.scrollObject !== null) {
-            scroll_object = $(settings.scrollObject);
-        } else {
-            scroll_object = self;
-        }
-        if (scroll_object.is('body') && !is_safari) {
-            scroll_object = $('html,body');
         }
         // register ajaxSend for cancel requests on CTRL+D
         $(document).bind('ajaxSend.terminal_' + self.id(), function(e, xhr) {
             requests.push(xhr);
         });
         var wrapper = $('<div class="terminal-wrapper"/>').appendTo(self);
-        var font_resizer = $('<div class="font">&nbsp;</div>').appendTo(self);
+        $(broken_image).hide().appendTo(wrapper);
+        var font_resizer = $('<div class="terminal-font">&nbsp;</div>').appendTo(self);
         var fill = $('<div class="terminal-fill"/>').appendTo(self);
         output = $('<div>').addClass('terminal-output').attr('role', 'log')
             .appendTo(wrapper);
         self.addClass('terminal');
         // before login event
-        if (settings.login && is_function(settings.onBeforeLogin)) {
-            try {
-                if (settings.onBeforeLogin.call(self, self) === false) {
-                    autologin = false;
-                }
-            } catch (e) {
-                settings.onBeforeLogin = $.noop;
-                display_exception(e, 'onBeforeLogin');
-            }
+        if (settings.login && fire_event('onBeforeLogin') === false) {
+            autologin = false;
         }
         // create json-rpc authentication function
         var base_interpreter;
         if (typeof init_interpreter === 'string') {
             base_interpreter = init_interpreter;
-        } else if (init_interpreter instanceof Array) {
+        } else if (is_array(init_interpreter)) {
             // first JSON-RPC
             for (var i = 0, len = init_interpreter.length; i < len; ++i) {
                 if (typeof init_interpreter[i] === 'string') {
@@ -8073,10 +9670,42 @@
                 self.focus();
             }
         }
+        // -------------------------------------------------------------------------------
         function blur_terminal() {
             old_enabled = enabled;
             self.disable().find('.cmd textarea').trigger('blur', [true]);
         }
+        // -------------------------------------------------------------------------------
+        function stringify_value(value) {
+            if (is_function(value)) {
+                value = value();
+            }
+            if (get_type(value) !== 'string') {
+                if (is_function(settings.parseObject)) {
+                    var ret = settings.parseObject(value);
+                    if (get_type(ret) === 'string') {
+                        value = ret;
+                    }
+                } else if (is_array(value)) {
+                    value = $.terminal.columns(value, self.cols(), settings.tabs);
+                } else {
+                    value = String(value);
+                }
+            }
+            return value;
+        }
+        // -------------------------------------------------------------------------------
+        function context_callback_proxy(fn) {
+            if (fn.proxy) {
+                return fn;
+            }
+            var wrapper = function(callback) {
+                return fn.call(self, callback, self);
+            };
+            wrapper.proxy = true;
+            return wrapper;
+        }
+        // -------------------------------------------------------------------------------
         // paste event is not testable in node
         // istanbul ignore next
         function paste_event(e) {
@@ -8087,6 +9716,45 @@
             function is_type(item, type) {
                 return item.type.indexOf(type) !== -1;
             }
+            function echo_image(image) {
+                self.echo('<img src="' + image + '"/>', {raw: true});
+            }
+            function data_uri(blob) {
+                var URL = window.URL || window.webkitURL;
+                return URL.createObjectURL(blob);
+            }
+            function echo(object, ignoreEvents) {
+                if (!ignoreEvents && is_function(settings.onPaste)) {
+                    var event = {
+                        target: self
+                    };
+                    if (typeof object === 'string') {
+                        event['text'] = object;
+                    } else if (object instanceof Blob) {
+                        event['image'] = data_uri(object);
+                    }
+                    var ret = fire_event('onPaste', [event]);
+                    if (ret) {
+                        if (is_function(ret.then || ret.done)) {
+                            return (ret.then || ret.done).call(ret, function(ret) {
+                                echo(ret, true);
+                            });
+                        } else {
+                            echo(ret, true);
+                        }
+                    } else {
+                        echo(event.image || event.text, true);
+                    }
+                } else if (object instanceof Blob) {
+                    echo_image(data_uri(object));
+                } else if (typeof object === 'string') {
+                    if (object.match(/^(data:|blob:)/)) {
+                        echo_image(object);
+                    } else {
+                        self.insert(object);
+                    }
+                }
+            }
             if (e.clipboardData) {
                 if (self.enabled()) {
                     var items = e.clipboardData.items;
@@ -8094,16 +9762,14 @@
                         for (var i = 0; i < items.length; i++) {
                             if (is_type(items[i], 'image') && settings.pasteImage) {
                                 var blob = items[i].getAsFile();
-                                var URL = window.URL || window.webkitURL;
-                                var source = URL.createObjectURL(blob);
-                                self.echo('<img src="' + source + '"/>', {raw: true});
+                                echo(blob);
                             } else if (is_type(items[i], 'text/plain')) {
-                                items[i].getAsString(self.insert);
+                                items[i].getAsString(echo);
                             }
                         }
                     } else if (e.clipboardData.getData) {
                         var text = e.clipboardData.getData('text/plain');
-                        self.insert(text);
+                        echo(text);
                     }
                     return false;
                 }
@@ -8125,17 +9791,21 @@
                 };
             })
         );
-        make_interpreter(init_interpreter, settings.login, function(itrp) {
+        make_interpreter(init_interpreter, settings.login, function(interpreter) {
             if (settings.completion && typeof settings.completion !== 'boolean' ||
                 !settings.completion) {
                 // overwrite interpreter completion by global setting #224
                 // we use string to indicate that it need to be taken from settings
                 // so we are able to change it using option API method
-                itrp.completion = 'settings';
+                interpreter.completion = 'settings';
+            }
+            var prompt = settings.prompt;
+            if (is_function(prompt)) {
+                prompt = context_callback_proxy(prompt);
             }
             interpreters = new Stack($.extend({}, settings.extra, {
                 name: settings.name,
-                prompt: settings.prompt,
+                prompt: prompt,
                 keypress: settings.keypress,
                 keydown: settings.keydown,
                 resize: settings.onResize,
@@ -8143,14 +9813,18 @@
                 mousewheel: settings.mousewheel,
                 history: settings.history,
                 keymap: new_keymap
-            }, itrp));
+            }, interpreter));
             // CREATE COMMAND LINE
             command_line = $('<div/>').appendTo(wrapper).cmd({
-                prompt: settings.prompt,
+                tabindex: settings.tabindex,
+                mobileDelete: settings.mobileDelete,
+                mobileIngoreAutoSpace: settings.mobileIngoreAutoSpace,
+                prompt: global_login_fn ? false : prompt,
                 history: settings.memory ? 'memory' : settings.history,
                 historyFilter: settings.historyFilter,
                 historySize: settings.historySize,
                 caseSensitiveSearch: settings.caseSensitiveSearch,
+                onPaste: settings.onPaste,
                 width: '100%',
                 enabled: false,
                 char_width: char_size.width,
@@ -8159,22 +9833,31 @@
                 clickTimeout: settings.clickTimeout,
                 holdTimeout: settings.holdTimeout,
                 holdRepeatTimeout: settings.holdRepeatTimeout,
+                repeatTimeoutKeys: settings.repeatTimeoutKeys,
+                allowedAttributes: settings.allowedAttributes,
                 keypress: key_press,
                 tabs: settings.tabs,
+                onPositionChange: function() {
+                    var args = [].slice.call(arguments);
+                    make_cursor_visible();
+                    fire_event('onPositionChange', args);
+                },
                 onCommandChange: function(command) {
-                    if (is_function(settings.onCommandChange)) {
-                        try {
-                            settings.onCommandChange.call(self, command, self);
-                        } catch (e) {
-                            settings.onCommandChange = $.noop;
-                            display_exception(e, 'onCommandChange');
-                        }
+                    // resize is not triggered when insert called just after init
+                    //  and scrollbar appear
+                    if (old_width !== fill.width()) {
+                        // resizer handler will update old_width
+                        self.resizer();
                     }
-                    self.scroll_to_bottom();
+                    fire_event('onCommandChange', [command]);
+                    make_cursor_visible();
                 },
                 commands: commands
             });
             function disable(e) {
+                if (is_mobile) {
+                    return;
+                }
                 e = e.originalEvent;
                 if (e) {
                     // e.terget is body when click outside of context menu to close it
@@ -8192,23 +9875,66 @@
                     bind('contextmenu.terminal_' + self.id(), disable);
             });
             var $win = $(window);
-            // cordova application, if keyboard was open and we resume it will be
+            // cordova application, if keyboard was open and we resume, it will be
             // closed so we need to disable terminal so you can enable it with tap
             document.addEventListener("resume", function() {
                 self.disable();
             });
             // istanbul ignore next
             if (is_mobile) {
-                self.click(function() {
-                    if (!frozen) {
-                        if (!self.enabled()) {
-                            self.focus();
-                            command_line.enable();
-                        } else {
-                            self.disable();
+                (function() {
+                    self.addClass('terminal-mobile');
+                    var start;
+                    var move;
+                    var enabled;
+                    var SENSITIVITY = 3;
+                    var clip = command_line.clip();
+                    var HOLD_TIME = 200;
+                    var timer;
+                    clip.$node.off('touchstart.cmd');
+                    self.on('touchstart.terminal', function(e) {
+                        e = e.originalEvent;
+                        window.touch_event = e;
+                        if (e.target.tagName.toLowerCase() === 'a') {
+                            return;
                         }
-                    }
-                });
+                        if (!frozen && e.touches.length === 1) {
+                            enabled = self.enabled();
+                            var point = e.touches[0];
+                            start = {
+                                x: point.clientX,
+                                y: point.clientY
+                            };
+                            timer = setTimeout(function() {
+                                start = null;
+                            }, HOLD_TIME);
+                        }
+                    }).on('touchmove.terminal', function(e) {
+                        if (e.touches.length === 1 && start) {
+                            var point = e.touches[0];
+                            var diff_x = Math.abs(point.clientX - start.x);
+                            var diff_y = Math.abs(point.clientY - start.y);
+                            if (diff_x > SENSITIVITY || diff_y > SENSITIVITY) {
+                                move = true;
+                            }
+                        }
+                    }).on('touchend.terminal', function() {
+                        if (start) {
+                            clearTimeout(timer);
+                            if (!move) {
+                                if (!enabled) {
+                                    clip.focus();
+                                    self.focus();
+                                } else {
+                                    clip.blur();
+                                    self.disable();
+                                }
+                            }
+                        }
+                        move = false;
+                        start = null;
+                    });
+                })();
             } else {
                 // work weird on mobile
                 $win.on('focus.terminal_' + self.id(), focus_terminal).
@@ -8224,11 +9950,23 @@
                             $target.is('.terminal-wrapper')) {
                             var len = self.get_command().length;
                             self.set_position(len);
-                        } else if ($target.closest('.prompt').length) {
+                        } else if ($target.closest('.cmd-prompt').length) {
                             self.set_position(0);
                         }
                         if (!textarea.is(':focus')) {
-                            textarea.focus();
+                            var offset = command_line.offset();
+                            var self_offset = self.offset();
+                            textarea.css({
+                                left: self_offset.left - offset.left,
+                                top: Math.max(self_offset.top - offset.top, 0)
+                            }).focus();
+                            self.stopTime('focus');
+                            self.oneTime(10, 'focus', function() {
+                                textarea.css({
+                                    left: '',
+                                    top: ''
+                                });
+                            });
                         }
                         reset();
                     }
@@ -8236,21 +9974,18 @@
                         count = 0;
                         $target = null;
                     }
-                    // hack for weird jumping on Chrome/windows #402
-                    var scroll_top;
-                    self.find('.cmd textarea').on('focus', function() {
-                        if (typeof scroll_top !== 'undefined') {
-                            scroll_object.scrollTop(scroll_top);
-                        }
-                    }).on('blur', function() {
-                        scroll_top = scroll_object.scrollTop();
-                    });
+                    var ignore_elements = '.terminal-output textarea,' +
+                        '.terminal-output input';
                     self.mousedown(function(e) {
                         if (!scrollbar_event(e, fill)) {
                             $target = $(e.target);
                         }
                     }).mouseup(function() {
-                        if (get_selected_text() === '' && $target) {
+                        if ($target && $target.closest(ignore_elements).length) {
+                            if (enabled) {
+                                self.disable();
+                            }
+                        } else if (get_selected_html() === '' && $target) {
                             if (++count === 1) {
                                 if (!frozen) {
                                     if (!enabled) {
@@ -8272,37 +10007,47 @@
                     });
                 })();
                 (function() {
-                    var clip = self.find('.cmd textarea');
-                    self.on('contextmenu.terminal', function(e) {
-                        if (get_selected_text() === '') {
+                    var $clip = command_line.clip().$node;
+                    function is_context_event(e) {
+                        return e.type === 'mousedown' && e.buttons === 2 ||
+                            e.type === 'contextmenu';
+                    }
+                    self.on('contextmenu.terminal mousedown.terminal', function(e) {
+                        if (get_selected_html() === '' && is_context_event(e)) {
                             if (!$(e.target).is('img,value,audio,object,canvas,a')) {
                                 if (!self.enabled()) {
                                     self.enable();
                                 }
                                 var offset = command_line.offset();
-                                clip.css({
+                                $clip.css({
                                     left: e.pageX - offset.left - 20,
                                     top: e.pageY - offset.top - 20,
                                     width: '5em',
                                     height: '4em'
                                 });
-                                if (!clip.is(':focus')) {
-                                    clip.focus();
+                                if (!$clip.is(':focus')) {
+                                    $clip.focus();
                                 }
                                 self.stopTime('textarea');
                                 self.oneTime(100, 'textarea', function() {
-                                    clip.css({
+                                    var props = {
                                         left: '',
                                         top: '',
                                         width: '',
                                         height: ''
-                                    });
+                                    };
+                                    if (!is_css_variables_supported) {
+                                        var in_line = self.find('.cmd .cmd-cursor-line')
+                                            .prevUntil('.cmd-prompt').length;
+                                        props.top = in_line * 14 + 'px';
+                                    }
+                                    $clip.css(props);
                                 });
                                 self.stopTime('selection');
                                 self.everyTime(20, 'selection', function() {
-                                    if (clip[0].selection !== clip[0].value) {
-                                        if (get_textarea_selection(clip[0])) {
-                                            clear_textarea_selection(clip[0]);
+                                    if ($clip[0].selection !== $clip[0].value) {
+                                        if (get_textarea_selection($clip[0])) {
+                                            clear_textarea_selection($clip[0]);
                                             select(
                                                 self.find('.terminal-output')[0],
                                                 self.find('.cmd div:last-of-type')[0]
@@ -8318,11 +10063,11 @@
             }
             self.on('click', 'a', function(e) {
                 var $this = $(this);
-                if ($this.closest('.exception').length) {
+                if ($this.closest('.terminal-exception').length) {
                     var href = $this.attr('href');
                     if (href.match(/:[0-9]+$/)) { // display line if specified
                         e.preventDefault();
-                        print_line(href);
+                        print_line(href, self.cols());
                     }
                 }
                 // refocus because links have tabindex in case where user want
@@ -8352,12 +10097,36 @@
                 }
             }
             function create_resizers() {
-                self.resizer('unbind').resizer(resize);
+                var options = {
+                    prefix: 'terminal-'
+                };
+                self.resizer('unbind').resizer(resize, options);
                 font_resizer.resizer('unbind').resizer(function() {
                     calculate_char_size();
                     self.resize();
-                });
+                }, options);
             }
+            function bottom_detect(intersections) {
+                is_bottom_detected = intersections[0].intersectionRatio === 1;
+            }
+            function create_bottom_detect() {
+                if (window.IntersectionObserver) {
+                    var top = $('<div class="terminal-scroll-marker"/>').appendTo(self);
+                    var marker = top;
+                    if (settings.scrollBottomOffset !== -1) {
+                        marker = $('<div/>').css({
+                            height: settings.scrollBottomOffset
+                        }).appendTo(top);
+                    }
+                    is_bottom_observer = new IntersectionObserver(bottom_detect, {
+                        root: self[0]
+                    });
+                    is_bottom_observer.observe(marker[0]);
+                }
+            }
+            // this observer can be added imedietely even if terminal is not in the DOM
+            // because both of the elements (root and target) are in same fragment
+            create_bottom_detect();
             if (self.is(':visible')) {
                 create_resizers();
             }
@@ -8371,8 +10140,14 @@
                 }
                 var was_enabled = self.enabled();
                 var visible = self.is(':visible');
+                if (was_enabled && !visible) {
+                    self.disable();
+                }
                 if (visible) {
                     create_resizers();
+                } else {
+                    // hide terminal content until it's resized (and num chars calculated)
+                    wrapper.css('visibility', 'hidden');
                 }
                 function visibility_checker() {
                     if (self.is(':visible') && !visible) {
@@ -8383,19 +10158,21 @@
                         if (was_enabled) {
                             self.enable();
                         }
+                        wrapper.css('visibility', '');
                     } else if (visible && !self.is(':visible')) {
                         visible = false;
                         was_enabled = $.terminal.active() === self && self.enabled();
                         self.disable();
+                        wrapper.css('visibility', 'hidden');
                     }
                 }
-                if (window.IntersectionObserver) {
+                if (window.IntersectionObserver && self.css('position') !== 'fixed') {
                     visibility_observer = new IntersectionObserver(visibility_checker, {
-                        root: document.body
+                        root: null
                     });
                     visibility_observer.observe(self[0]);
                 } else {
-                    visibility_observer = setInterval(visibility_checker, 400);
+                    visibility_observer = setInterval(visibility_checker, 100);
                 }
             }
             var in_dom = !!self.closest('body').length;
@@ -8405,9 +10182,8 @@
                     if (self.closest('body').length) {
                         if (!in_dom) {
                             self.scroll_to_bottom();
-                            if (window.IntersectionObserver) {
-                                observe_visibility();
-                            }
+                            // this observer need to be added when terminal is in the DOM
+                            observe_visibility();
                             resize();
                         }
                         in_dom = true;
@@ -8516,14 +10292,15 @@
                         } else if (is_function(settings.mousewheel)) {
                             ret = settings.mousewheel(event, delta, self);
                         }
-                        if (have_scrollbar() || ret === false) {
+                        if (ret === true) {
+                            return;
+                        }
+                        if ((have_scrollbar() || ret === false) && !event.ctrlKey) {
                             event.stopPropagation();
                             event.preventDefault();
                         }
                         if (ret === false) {
                             return false;
-                        } else if (ret === true) {
-                            return;
                         }
                         if (delta > 0) {
                             self.scroll(-40);
@@ -8560,9 +10337,22 @@
                         mousewheel(e, -delta);
                     });
                 }
+                self.touch_scroll(function(event) {
+                    var delta = event.current.clientY - event.previous.clientY;
+                    var ret;
+                    var interpreter = interpreters.top();
+                    if (is_function(interpreter.touchscroll)) {
+                        ret = interpreter.touchscroll(event, delta, self);
+                    } else if (is_function(settings.touchscroll)) {
+                        ret = settings.touchscroll(event, delta, self);
+                    }
+                    if (ret === true) {
+                        return;
+                    }
+                    return false;
+                });
             })();
         }); // make_interpreter
-        self.data('terminal', self);
         return self;
     }; // terminal plugin
 });

@@ -9,11 +9,11 @@
  *
  * This is example of how to create custom formatter for jQuery Terminal
  *
- * Copyright (c) 2014-2018 Jakub Jankiewicz <http://jcubic.pl/me>
+ * Copyright (c) 2014-2020 Jakub Jankiewicz <https://jcubic.pl/me>
  * Released under the MIT license
  *
  */
-/* global jQuery, define, global, require, module */
+/* global define */
 (function(factory) {
     var root = typeof window !== 'undefined' ? window : global;
     if (typeof define === 'function' && define.amd) {
@@ -81,5 +81,6 @@
         }
         return output.join('');
     }
+    $.terminal.xml_formatter = xml_formatter;
     $.terminal.new_formatter(xml_formatter);
 });

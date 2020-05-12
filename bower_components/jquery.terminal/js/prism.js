@@ -30,17 +30,17 @@
  * by default only javascript markup and css languages are defined (also file extension
  * for them. To have more languages you need to include appropriate js files.
  *
- * Copyright (c) 2018 Jakub Jankiewicz <http://jcubic.pl/me>
+ * Copyright (c) 2018-2020 Jakub Jankiewicz <https://jcubic.pl/me>
  * Released under the MIT license
  *
  */
-/* global jQuery, Prism, define, global, require, module */
+/* global define */
 (function(factory, undefined) {
     var root = typeof window !== 'undefined' ? window : global;
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as an anonymous module.
         // istanbul ignore next
-        define(['prismjs', 'jquery', 'jquery.terminal'], factory);
+        define(['jquery', 'prismjs', 'jquery.terminal'], factory);
     } else if (typeof module === 'object' && module.exports) {
         // Node/CommonJS
         module.exports = function(root, jQuery, Prism) {
@@ -80,11 +80,11 @@
     }
     var _ = $.extend({}, Prism);
 
-    _.Token = function(type, content, alias, matchedStr, greedy) {
+    _.Token = function() {
         Token.apply(this, [].slice.call(arguments));
     };
-    _.Token.stringify = function(o, language, parent, recur) {
-        if (typeof o == 'string') {
+    _.Token.stringify = function(o, language, parent) {
+        if (typeof o === 'string') {
             return o;
         }
 
@@ -95,7 +95,6 @@
         }
 
         var env = {
-            type: o.type,
             content: _.Token.stringify(o.content, language, parent),
             tag: 'span',
             classes: ['token', o.type],
@@ -104,7 +103,7 @@
             parent: parent
         };
 
-        if (env.type == 'comment') {
+        if (env.type === 'comment') {
             env.attributes['spellcheck'] = 'true';
         }
 
@@ -117,7 +116,17 @@
 
         return env.content.split(/\n/).map(function(content) {
             if (content) {
-                return '\x00\x00\x00\x00[[b;;;' + env.classes.join(' ') + ']' + content + '\x00\x00\x00\x00]';
+                // escape nested non formatting
+                // so you can use like <script>alert("[[;red;]xxxx]");</script>
+                var parts = content.split(format_split_re).filter(Boolean);
+                content = parts.map(function(string) {
+                    if (!string.match(/^\x00/)) {
+                        return $.terminal.escape_brackets(string).replace(/\\/g, '&#92;');
+                    }
+                    return string;
+                }).join('');
+                return '\x00\x00\x00\x00[[b;;;' + env.classes.join(' ') + ']' +
+                    content + '\x00\x00\x00\x00]';
             }
             return '';
         }).join('\n');
@@ -128,10 +137,12 @@
     if (!$.terminal) {
         throw new Error('$.terminal is not defined');
     }
-    // we use 0x00 character so we know which one of the formatting came from prism so we can escape the reset
-    // because we unescape original values, the values need to be escape in cmd plugin so you can't type in
-    // formatting
-    var format_split_re = /(\x00\x00\x00\x00(?:\[\[[!gbiuso]*;[^;]*;[^\]]*\](?:[^\]]*[^\\](\\\\)*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]*)\]?|\]))/i;
+    // we use 0x00 character so we know which one of the formatting came from prism
+    // so we can escape the reset because we unescape original values, the values
+    // need to be escape in cmd plugin so you can't type in formatting
+    /* eslint-disable */
+    var format_split_re = /(\x00\x00\x00\x00(?:\[\[[!gbiuso]*;[^;]*;[^\]]*\](?:[^\]\\]*(\\\\)*\\\][^\]]*|[^\]]*|[^[]*\[[^\]]*)\]?|\]))/i;
+    /* eslint-enable */
     $.terminal.prism = function prism(language, string) {
         if (language === 'website') {
             var re = /(<\/?\s*(?:script|style)[^>]*>)/g;
@@ -161,9 +172,8 @@
             string = string.split(format_split_re).filter(Boolean).map(function(string) {
                 if (string.match(/^\x00/)) {
                     return string.replace(/\x00/g, '');
-                } else {
-                    return $.terminal.escape_brackets(string);
                 }
+                return $.terminal.escape_brackets(string);
             }).join('');
         }
         return string;
@@ -175,8 +185,8 @@
         var fn = new Function('$', 'return function syntax_' + language +
                               '(string) { return $.terminal.prism("' + language +
                               '", string); }')($);
-        // disable warning because it may create nested formatting
         fn.__no_warn__ = true;
+        // disable warning because it may create nested formatting
         $.terminal.new_formatter(fn);
     };
 });
