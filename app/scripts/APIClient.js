@@ -3,9 +3,9 @@
     This constructor is intended to create a client that is bound to a set
     of HTTP endpoints
 */
-function APIClient(registry){
+function APIClient(registry, $http, $sceDelegateProvider){
     if(!(this instanceof APIClient)){
-        return new APIClient(registry);
+        return new APIClient(registry, $http);
     }
 
     this.get = (function(container){
@@ -17,6 +17,12 @@ function APIClient(registry){
                 success: config.success,
                 error: config.error
             });
+			/*var httpConfig = {
+				method: 'get',
+                headers: entry.headers?container.interpolate(entry.headers, config):undefined,
+				jsonpCallbackParam: 'callback'
+			};
+			$http.jsonp(container.interpolate(entry.url, config), httpConfig).then(config.success, config.error);*/
         };
     })(this);
     this.post = (function(container){

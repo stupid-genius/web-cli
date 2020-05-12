@@ -2,6 +2,13 @@
 'use strict';
 
 var servicesModule = angular.module('ServicesModule', []);
+servicesModule.config(function($sceDelegateProvider){
+	var whiteList = $sceDelegateProvider.resourceUrlWhitelist();
+    for(var key in endpointRegistry){
+		whiteList.push(endpointRegistry[key].url.replace(/\{\{(.+?)\}\}/g, '**'));
+	}
+	$sceDelegateProvider.resourceUrlWhitelist(whiteList);
+});
 servicesModule.value('DocumentRoot', 'DocumentService:/');
 servicesModule.value('BuiltinDocuments', ';grammar.tiny;example.tiny;readme.md');
 servicesModule.service('FileService', ['FileSystem', function(fs){
@@ -70,4 +77,4 @@ function FileSystem(fs){
 	});
 }
 servicesModule.value('EndpointRegistry', endpointRegistry);
-servicesModule.factory('APIClient', ['EndpointRegistry', APIClient]);
+servicesModule.factory('APIClient', ['EndpointRegistry', '$http', '$sceDelegate', APIClient]);

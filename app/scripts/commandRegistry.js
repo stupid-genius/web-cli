@@ -1,3 +1,7 @@
+/*
+ *	IDEAS
+ *	- chmod, crontab code/decode
+ */
 var commandRegistry = function(APIClient, DocumentService, builtin){
 	var registry = {
 		anagram: function(){
@@ -16,6 +20,10 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 			this.echo(JSON.stringify(APIClient));
 			return 'API Client - load registry from DocumentService';
 		},
+		/*ascii: function(){
+			var arr = [[1,2,3,4,5], ["lorem", "ipsum", "dolor", "sit", "amet"]];
+			return ascii_table(arr, true);
+		},*/
 		cas: function(){
 			var Alg = Algebrite;
 			this.push([{
@@ -45,16 +53,24 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 			return doc;
 		},
 		date: function(){
-			return 'date';
+			return Date();
 		},
 		dm42: function(){
 			return 'DM42 editor';
 		},
 		endec: function(){
-			return 'encode/decode ascii, base64, hex, phone number, png, url';
+			return 'encode/decode ascii, base64, hex, keyboard/scan, phone number, png, url';
 		},
 		help: function(){
-			return Object.keys(registry);
+			this.echo('Available commands:');
+			var cmds = Object.keys(registry);
+			for(var cmd in cmds){
+				this.echo(cmds[cmd]);
+			}
+			return '';
+		},
+		hot: function(){
+			return 'Hands On Table (reads from DocumentService)';
 		},
 		ip: function(ip){
 			return new Promise(function(resolve, reject){
@@ -157,6 +173,9 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 		ls: function(){
 			return (localStorage['DocumentService:/']+builtin).split(/;/).filter(function(e){return e!==''});
 		},
+		md: function(){
+			return 'MarkDown viewer (reads from DocumentService)';
+		},
 		passgen: function(){
 			return new Promise(function(resolve, reject){
 				APIClient.passgen({
@@ -169,6 +188,9 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 		prng: function(max){
 			return uheprng()(max);
 		},
+		tex: function(){
+			return 'TeX viewer (reads from DocumentService)';
+		},
 		url: function(){
 			return 'URL shortener';
 		},
@@ -178,11 +200,16 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 			return '';
 	    },
 		weather: function(location){
+			var term = this;
 			return new Promise(function(resolve, reject){
 				APIClient.weather({
 					loc: location,
 					success: function(res){
-						resolve(res);
+						var response = $(res)
+						resolve(response);
+					},
+					error: function(msg){
+						reject(JSON.stringify(msg));
 					}
 				});
 			});
