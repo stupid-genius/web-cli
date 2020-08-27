@@ -1,14 +1,22 @@
 /*
  *	IDEAS
  *	- chmod, crontab code/decode
+ *	- area code lookup
+ *	- dict
  */
 var commandRegistry = function(APIClient, DocumentService, builtin){
 	var registry = {
-		anagram: function(){
+		anagram: function(queryWord){
+			var term = this;
 			return new Promise(function(resolve, reject){
 				APIClient.anagrams({
+					word: queryWord,
 					success: function(res){
-						resolve(res);
+						var response = eval(res);
+						for(var word in response){
+							term.echo(response[word]);
+						}
+						resolve();
 					},
 					error: function(error){
 						resolve(error);
@@ -58,8 +66,11 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 		dm42: function(){
 			return 'DM42 editor';
 		},
-		endec: function(){
-			return 'encode/decode ascii, base64, hex, keyboard/scan, phone number, png, url';
+		download: function(){
+			return 'file download; uses DocumetService';
+		},
+		endec: function(url){
+			return decodeURI(url);
 		},
 		help: function(){
 			this.echo('Available commands:');
@@ -173,6 +184,9 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 		ls: function(){
 			return (localStorage['DocumentService:/']+builtin).split(/;/).filter(function(e){return e!==''});
 		},
+		man: function(){
+			return 'display man page for commands';
+		},
 		md: function(){
 			return 'MarkDown viewer (reads from DocumentService)';
 		},
@@ -188,8 +202,21 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 		prng: function(max){
 			return uheprng()(max);
 		},
+		qotd: function(){
+			return new Promise(function(resolve, reject){
+				APIClient.qotd({
+					success: function(res){
+						resolve(res);
+					}
+				});
+			});
+		},
 		tex: function(){
 			return 'TeX viewer (reads from DocumentService)';
+		},
+		time: function(){
+			var date = new Date();
+			return date.getHours()+':'+date.getMinutes()+':'+date.getSeconds()+':'+date.getMilliseconds();
 		},
 		url: function(){
 			return 'URL shortener';

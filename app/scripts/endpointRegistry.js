@@ -2,15 +2,19 @@
 
 var endpointRegistry = {
 	anagrams: {
-		url: 'https://stupid-genius.com/cgi-bin/anagrams.cgi',
+		url: 'https://stupid-genius.com/anagrams.cgi?{{word}}',
 		method: 'get'
 	},
 	ipinfo: {
 		url: 'https://ipinfo.io/{{ip}}',
-		method: 'get'
+		method: 'jsonp'
 	},
 	passgen: {
-		url: 'https://stupid-genius.com/cgi-bin/passgen.cgi',
+		url: 'https://stupid-genius.com/passgen.cgi',
+		method: 'get'
+	},
+	qotd: {
+		url: 'https://stupid-genius.com/qotd.cgi',
 		method: 'get'
 	},
 	weather: {

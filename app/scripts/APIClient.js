@@ -17,12 +17,6 @@ function APIClient(registry, $http, $sceDelegateProvider){
                 success: config.success,
                 error: config.error
             });
-			/*var httpConfig = {
-				method: 'get',
-                headers: entry.headers?container.interpolate(entry.headers, config):undefined,
-				jsonpCallbackParam: 'callback'
-			};
-			$http.jsonp(container.interpolate(entry.url, config), httpConfig).then(config.success, config.error);*/
         };
     })(this);
     this.post = (function(container){
@@ -93,6 +87,16 @@ function APIClient(registry, $http, $sceDelegateProvider){
 			req.send();
         };
     })(this);
+	this.jsonp = (function(container){
+		return function(entry, config){
+			var httpConfig = {
+				method: 'get',
+                headers: entry.headers?container.interpolate(entry.headers, config):undefined,
+				jsonpCallbackParam: 'callback'
+			};
+			$http.jsonp(container.interpolate(entry.url, config), httpConfig).then(config.success, config.error);
+		};
+	})(this);
 
 	this.interpolate = function interpolator(template, model){
         if(template instanceof Object){
