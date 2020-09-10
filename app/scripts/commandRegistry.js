@@ -32,6 +32,21 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 			var arr = [[1,2,3,4,5], ["lorem", "ipsum", "dolor", "sit", "amet"]];
 			return ascii_table(arr, true);
 		},*/
+		btc: function(cmd){
+			return new Promise(function(resolve, reject){
+				APIClient.btc({
+					cmd: cmd,
+					success: function(res){
+						var response = $(res)
+						resolve(response);
+					},
+					error: function(msg){
+						reject(JSON.stringify(msg));
+					}
+				});
+			});
+			
+		},
 		cas: function(){
 			var Alg = Algebrite;
 			this.push([{
@@ -60,6 +75,21 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 			var doc = DocumentService.read(arguments[0]);
 			return doc;
 		},
+		cs: function(){
+			var cmd = [].slice.call(arguments);
+			return new Promise(function(resolve, reject){
+				APIClient.cheat({
+					cmd: cmd.join(' '),
+					success: function(res){
+						var response = $(res)
+						resolve(response);
+					},
+					error: function(msg){
+						reject(JSON.stringify(msg));
+					}
+				});
+			});
+		},
 		date: function(){
 			return Date();
 		},
@@ -69,16 +99,28 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 		download: function(){
 			return 'file download; uses DocumetService';
 		},
-		endec: function(url){
-			return decodeURI(url);
+		endec: function(s, input){
+			switch(s){
+				case 'url':
+					return decodeURI(input);
+				case 'html':
+					return decodeHtml(input);
+			}
+		},
+		fpga: function(){
+			return 'fpga programming interface';
 		},
 		help: function(){
-			this.echo('Available commands:');
-			var cmds = Object.keys(registry);
-			for(var cmd in cmds){
-				this.echo(cmds[cmd]);
+			var args = [].slice.call(arguments);
+			if(args.length<1){
+				this.echo('Available commands:');
+				var cmds = Object.keys(registry);
+				for(var cmd in cmds){
+					this.echo(cmds[cmd]);
+				}
+			}else{
+				return 'Display help for {{0}}'.format(args[0]);
 			}
-			return '';
 		},
 		hot: function(){
 			return 'Hands On Table (reads from DocumentService)';
@@ -211,6 +253,20 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 				});
 			});
 		},
+		qr: function(url){
+			return new Promise(function(resolve, reject){
+				APIClient.qr({
+					url: url,
+					success: function(res){
+						var response = $(res)
+						resolve(response);
+					},
+					error: function(msg){
+						reject(JSON.stringify(msg));
+					}
+				});
+			});
+		},
 		tex: function(){
 			return 'TeX viewer (reads from DocumentService)';
 		},
@@ -229,7 +285,7 @@ var commandRegistry = function(APIClient, DocumentService, builtin){
 		weather: function(location){
 			var term = this;
 			return new Promise(function(resolve, reject){
-				APIClient.weather({
+				APIClient.weather2({
 					loc: location,
 					success: function(res){
 						var response = $(res)
