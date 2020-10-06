@@ -39,5 +39,9 @@ var endpointRegistry = {
 	weather2: {
 		url: 'https://v2.wttr.in/{{loc}}',
 		method: 'get'
+	},
+	weatherTest: {
+		url: 'files/iterm2.mock',
+		method: 'get'
 	}
 };

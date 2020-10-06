@@ -1,6 +1,25 @@
 // jshint devel:true
 'use strict';
 
+$.terminal.new_formatter(function(string){
+	//console.log('raw out: ', string);
+	if(string.match(/blarg/)){
+		console.log('replacing');
+		return 'blorg';
+	}
+	//var out = string.replace(/^.+$/, function(match){
+	var out = string.replace(/^.*]1337;.+$/, function(match){
+		console.log('img found', match);
+		var seq = match.split(/;/)
+		var data = seq[3].split(/:/)[1];
+		var png = `data:image/png;base64,${data}`;
+		var img = `[[@;;;;${png}]]`;
+		console.log(img);
+		return img;
+	});
+	return out;
+});
+
 var terminalModule = angular.module('TerminalModule', ['ServicesModule']);
 
 terminalModule.controller('ConsoleController', ['$scope', 'ExecutorService', 'DocumentService', function($scope, executor, DocumentService){
